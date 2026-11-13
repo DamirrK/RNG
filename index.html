@@ -1,0 +1,1432 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Blink Reader – BDSP stationary RNG</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+:root{
+  --lcd:#f6e7ee; --panel:#efd6e2; --well:#fcf3f7; --ink:#3a1f2f; --ink-soft:#75495f; --line:#c9a1b5;
+  --shine:#2a64a8; --shine-bg:#d8e9fb; --warn:#a3222e; --ok:#2d6a3d; --tap:#eccbda; --tap-hit:#3a1f2f;
+  --display:"DotGothic16", ui-monospace, "Courier New", monospace;
+  --body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --lcd:#140c12; --panel:#21141c; --well:#0c070a; --ink:#f2cfdf; --ink-soft:#b88aa1; --line:#47303d;
+    --shine:#96c8f2; --shine-bg:#172a40; --warn:#ff8f8f; --ok:#9fd6a6; --tap:#2a1922; --tap-hit:#f2cfdf;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --lcd:#140c12; --panel:#21141c; --well:#0c070a; --ink:#f2cfdf; --ink-soft:#b88aa1; --line:#47303d;
+  --shine:#96c8f2; --shine-bg:#172a40; --warn:#ff8f8f; --ok:#9fd6a6; --tap:#2a1922; --tap-hit:#f2cfdf;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+a{color:var(--ink);text-decoration-thickness:2px;text-underline-offset:2px;font-weight:700}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--lcd);color:var(--ink);font:17px/1.55 var(--body)}
+.wrap{max-width:560px;margin:0 auto;padding:16px 16px 48px}
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:6px 0 14px;border-bottom:2px solid var(--ink)}
+.brand{font-family:var(--display);font-size:1.5rem;line-height:1;letter-spacing:.02em}
+.brand small{display:block;font-family:var(--body);font-size:.8rem;color:var(--ink-soft);letter-spacing:0;margin-top:6px}
+.readout{font-family:var(--display);text-align:right;line-height:1.15}
+.readout .n{font-size:1.35rem}
+.readout .l{font-family:var(--body);font-size:.75rem;color:var(--ink-soft)}
+nav.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:14px 0 18px}
+nav.steps a{display:block;text-decoration:none;color:var(--ink-soft);border:2px solid var(--line);border-radius:10px;padding:6px 4px 7px;text-align:center;font-size:.8rem;line-height:1.2}
+nav.steps a b{display:block;font-family:var(--display);font-weight:400;font-size:1.25rem;line-height:1.1}
+nav.steps a[aria-current="page"]{border-color:var(--ink);color:var(--ink);background:var(--panel)}
+nav.steps a.done b::after{content:" ✓";font-size:.8rem}
+section.view{display:none}
+section.view.on{display:block}
+h1{font-family:var(--display);font-weight:400;font-size:1.9rem;line-height:1.1;margin:4px 0 8px}
+h2{font-size:1.05rem;margin:22px 0 8px}
+p{margin:0 0 12px}
+.lede{color:var(--ink-soft);margin-bottom:14px}
+details.how{border:2px solid var(--line);border-radius:12px;margin:0 0 16px;background:var(--panel)}
+details.how summary{cursor:pointer;padding:10px 14px;font-weight:700;list-style:none}
+details.how summary::-webkit-details-marker{display:none}
+details.how summary::before{content:"+ ";font-family:var(--display)}
+details.how[open] summary::before{content:"– "}
+details.how ol,details.how ul{margin:0;padding:0 16px 14px 34px}
+details.how li{margin:0 0 8px}
+.seg{display:inline-flex;border:2px solid var(--ink);border-radius:10px;overflow:hidden;margin:4px 0 14px}
+.seg button{border:0;background:transparent;color:var(--ink);font:inherit;font-size:.95rem;padding:8px 14px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--lcd)}
+.btn{font:inherit;font-weight:700;border:2px solid var(--ink);background:var(--ink);color:var(--lcd);border-radius:10px;padding:10px 16px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.tap{display:block;width:100%;min-height:230px;border:3px solid var(--ink);border-radius:20px;background:var(--tap);color:var(--ink);font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;padding:18px;margin:6px 0 10px}
+.tap .count{font-family:var(--display);font-size:3.6rem;line-height:1}
+.tap .hint{display:block;margin-top:10px;font-size:.95rem;color:var(--ink-soft)}
+.tap.flash{background:var(--tap-hit);color:var(--lcd)}
+.tap.flash .hint{color:var(--lcd)}
+.log{font-family:var(--display);font-size:.95rem;background:var(--well);border:2px solid var(--line);border-radius:10px;padding:8px 10px;min-height:44px;overflow-x:auto;white-space:nowrap}
+.log .small{white-space:normal;font-family:var(--body);display:block}
+.log .bad{color:var(--warn)}
+.log .d{text-decoration:underline}
+.msg{border-left:4px solid var(--ink);padding:8px 12px;margin:12px 0;background:var(--panel);border-radius:0 10px 10px 0}
+.msg.bad{border-color:var(--warn)}
+.msg.good{border-color:var(--ok)}
+.msg:empty{display:none}
+label.f{display:block;font-size:.9rem;color:var(--ink-soft);margin:0 0 4px}
+select,input[type=number],input[type=text]{font:inherit;color:var(--ink);background:var(--well);border:2px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+input[type=range]{width:100%;accent-color:var(--ink)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ivs{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.ivs label{font-size:.75rem;color:var(--ink-soft);text-align:center;display:block}
+.ivs input{text-align:center;padding:8px 2px}
+.check{display:flex;gap:10px;align-items:flex-start;margin:10px 0}
+.check input{width:22px;height:22px;margin:2px 0 0;accent-color:var(--ink);flex:none}
+.tablewrap{overflow-x:auto;border:2px solid var(--line);border-radius:10px;margin:10px 0;max-height:60vh;overflow-y:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:7px 8px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{position:sticky;top:0;background:var(--panel);font-weight:700;font-size:.8rem}
+td.num{font-family:var(--display)}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--panel)}
+tbody tr.sel{outline:2px solid var(--ink);outline-offset:-2px}
+.sh{color:var(--shine);font-weight:700}
+.tag{display:inline-block;font-family:var(--body);font-size:.7rem;font-weight:700;background:var(--shine-bg);color:var(--shine);border:1px solid var(--shine);border-radius:6px;padding:0 5px;vertical-align:1px}
+tr.shinyrow td:first-child{box-shadow:inset 4px 0 0 var(--shine)}
+.big{font-family:var(--display);font-size:clamp(3rem,17vw,6rem);line-height:1;text-align:center;margin:10px 0 4px;font-variant-numeric:tabular-nums}
+.sub{text-align:center;color:var(--ink-soft);margin-bottom:14px}
+.window{height:18px;border:2px solid var(--ink);border-radius:9px;position:relative;overflow:hidden;margin:6px 0 16px}
+.window .zone{position:absolute;top:0;bottom:0;background:var(--shine-bg);border-left:2px solid var(--shine);border-right:2px solid var(--shine)}
+.window .now{position:absolute;top:0;bottom:0;width:3px;background:var(--ink)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 14px}
+.stats div{background:var(--panel);border-radius:10px;padding:8px;text-align:center}
+.stats b{display:block;font-family:var(--display);font-weight:400;font-size:1.3rem}
+.stats span{font-size:.75rem;color:var(--ink-soft)}
+.targetcard{border:2px solid var(--ink);border-radius:12px;padding:12px 14px;margin:8px 0 14px}
+.targetcard .t{font-family:var(--display);font-size:1.2rem}
+.cam{position:relative;border:2px solid var(--ink);border-radius:12px;overflow:hidden;background:#000;margin:8px 0}
+.cam video{display:block;width:100%;height:auto}
+.cam canvas.ov{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.meter{height:26px;border:2px solid var(--line);border-radius:8px;position:relative;overflow:hidden;background:var(--well);margin:6px 0}
+.meter .bar{position:absolute;left:0;top:0;bottom:0;background:var(--ink-soft)}
+.meter .th{position:absolute;top:0;bottom:0;width:2px;background:var(--warn)}
+.small{font-size:.85rem;color:var(--ink-soft)}
+.hidden{display:none!important}
+footer{margin-top:30px;font-size:.8rem;color:var(--ink-soft);border-top:1px solid var(--line);padding-top:10px}
+:focus-visible{outline:3px solid var(--shine);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Blink Reader<small>BDSP stationary RNG, phone edition</small></div>
+    <div class="readout"><div class="n" id="hdrAdv">—</div><div class="l" id="hdrLbl">no seed yet</div></div>
+  </header>
+
+  <nav class="steps" aria-label="Steps">
+    <a href="#seed" data-step="seed"><b>1</b>Find seed</a>
+    <a href="#target" data-step="target"><b>2</b>Pick target</a>
+    <a href="#lineup" data-step="lineup"><b>3</b>Line up</a>
+    <a href="#hit" data-step="hit"><b>4</b>Hit it</a>
+  </nav>
+
+  <!-- STEP 1 -->
+  <section class="view" id="v-seed">
+    <h1>Find your seed</h1>
+    <p class="lede">Your trainer blinks on a fixed schedule that comes straight from the game’s RNG. Record 40 blinks and this works out the exact RNG state.</p>
+    <details class="how">
+      <summary>How to do this</summary>
+      <ol>
+        <li>Load your save and stand somewhere quiet where nothing else moves: no NPCs, no Pokémon following you, no other people walking about. Inside your house works well.</li>
+        <li>Don’t touch the controller once you start. Opening menus or walking changes the timing.</li>
+        <li>Turn off the Switch’s auto-sleep and set your phone’s screen to stay on.</li>
+        <li>Watch your trainer’s eyes. Most blinks are single. Every so often you’ll see a quick double blink.</li>
+        <li>Record 40 blinks with any method below: tap along, point the camera at the screen live, or film a clip first and upload it. It takes about five to ten minutes, as blinks are a few seconds apart on average.</li>
+        <li>If it can’t find a seed, a blink was missed or doubled up. Start again; it happens to everyone the first few times.</li>
+      </ol>
+    </details>
+
+    <div class="seg" role="group" aria-label="Recording method">
+      <button type="button" data-method="tap" aria-pressed="true">Tap</button>
+      <button type="button" data-method="cam" aria-pressed="false">Camera</button>
+      <button type="button" data-method="vid" aria-pressed="false">Upload video</button>
+    </div>
+
+    <div data-recorder="id"></div>
+
+    <h2>Already have a seed?</h2>
+    <p class="small">Paste it from another tool as four 32-bit hex values, or two 64-bit values. You’ll need to line up (step 3) before it can track.</p>
+    <div class="row"><input type="text" id="manualSeed" placeholder="e.g. 0x12345678 0x9abcdef0 0x0fedcba9 0x87654321" style="flex:1;min-width:0"><button class="btn ghost" type="button" id="manualSeedBtn">Use seed</button></div>
+    <div class="msg" id="manualMsg"></div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="view" id="v-target">
+    <h1>Pick your target</h1>
+    <p class="lede">Search the advances ahead of you for the Pokémon you want, then tap a result to lock it in.</p>
+    <details class="how">
+      <summary>How to choose</summary>
+      <ul>
+        <li>The RNG moves about one advance per second while you stand still, so a target 3,600 advances away is roughly an hour of waiting.</li>
+        <li>Shinies are 1 in 4,096 per advance. Searching 10,000 ahead usually turns up two or so. Adding IV or nature filters makes them rarer.</li>
+        <li>Pick something with at least five minutes of lead time so you can walk to the Pokémon and line up.</li>
+        <li>Don’t demand perfect IVs on a shiny. All six at 31 plus shiny is roughly 1 in 134 million for a legendary. Use “Rank results by IVs” instead and take the top result you can wait for.</li>
+        <li>Synchronize only fixes the nature if your lead has it and its nature matches what you pick here.</li>
+      </ul>
+    </details>
+    <div class="msg bad" id="targetNoSeed">Find your seed first (step 1).</div>
+    <div class="grid2">
+      <div><label class="f" for="game">Game</label><select id="game"><option value="BD">Brilliant Diamond</option><option value="SP">Shining Pearl</option></select></div>
+      <div><label class="f" for="enc">Pokémon</label><select id="enc"></select></div>
+      <div><label class="f" for="lead">Lead Pokémon</label><select id="lead"><option value="none">No ability lead</option><option value="sync">Synchronize</option><option value="cutecharmF">Cute Charm (female lead)</option><option value="cutecharmM">Cute Charm (male lead)</option></select></div>
+      <div id="syncWrap" class="hidden"><label class="f" for="syncNature">Synchronize nature</label><select id="syncNature"></select></div>
+      <div><label class="f" for="fShiny">Shiny</label><select id="fShiny"><option value="any">Any</option><option value="shiny" selected>Shiny only</option><option value="square">Square only</option></select></div>
+      <div><label class="f" for="fNature">Nature</label><select id="fNature"></select></div>
+      <div><label class="f" for="fGender">Gender</label><select id="fGender"><option value="any">Any</option><option value="0">Male</option><option value="1">Female</option></select></div>
+      <div><label class="f" for="fRange">Look ahead (advances)</label><input type="number" id="fRange" value="10000" min="100" max="1000000" step="1000"></div>
+    </div>
+    <h2>Minimum IVs</h2>
+    <div class="ivs" id="ivMins"></div>
+    <label class="f" for="fRank" style="margin-top:14px">Rank results by IVs</label>
+    <select id="fRank">
+      <option value="auto">Recommended for this Pokémon</option>
+      <option value="special">Special attacker</option>
+      <option value="physical">Physical attacker</option>
+      <option value="mixed">Mixed attacker</option>
+      <option value="defensive">Defensive</option>
+      <option value="overall">Best overall (highest total)</option>
+      <option value="off">Don’t rank (soonest first)</option>
+    </select>
+    <div id="setWrap" class="hidden" style="margin-top:10px"><label class="f" for="fSet" id="fSetLabel">How will you use it?</label><select id="fSet"></select></div>
+    <p class="small" id="rankHint" style="margin-top:6px"></p>
+    <label class="check"><input type="checkbox" id="fZeroAtk"><span>Attack must be 0 (only for Pokémon that use special moves)</span></label>
+    <div class="row"><button class="btn" type="button" id="searchBtn">Search</button><span class="small" id="searchInfo"></span></div>
+    <div class="tablewrap hidden" id="resWrap"><table><thead><tr><th>Advance</th><th>Wait</th><th>Shiny</th><th>IVs</th><th>Nature</th><th>Ability</th><th>Gender</th></tr></thead><tbody id="resBody"></tbody></table></div>
+    <div class="msg" id="targetMsg"></div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="view" id="v-lineup">
+    <h1>Line up</h1>
+    <p class="lede">Walking and menus advance the RNG by amounts nobody can predict, so once you’re standing in front of the Pokémon, record a few blinks to find exactly where you are, then keep recording to stay synced.</p>
+    <details class="how">
+      <summary>How to do this</summary>
+      <ol>
+        <li>Walk up to the Pokémon so the next A press starts the encounter. Don’t save in between.</li>
+        <li>Stop touching the controller.</li>
+        <li>If the Pokémon’s face is on screen and it blinks, tick the box below. Its blinks also move the RNG and the maths needs to know.</li>
+        <li>Record 10 of your trainer’s blinks. Fewer may match in more than one place.</li>
+        <li>Once it finds you, keep going. Every new blink re-syncs the countdown, which matters most when the Pokémon is blinking: its blinks make long-range prediction unreliable, but watching right up to the press makes it accurate.</li>
+        <li>The camera can watch the whole wait for you. With tapping, you only need to tap through the last few minutes: tap “Start over”, line up again, and keep tapping on step 4.</li>
+        <li>If you stop recording, don’t pick up where you left off, because the missing blinks will throw it out. Tap “Start over” instead.</li>
+      </ol>
+    </details>
+    <div class="msg bad" id="lineupNoSeed">Find your seed first (step 1).</div>
+    <label class="check"><input type="checkbox" id="pkBlink"><span>The Pokémon in front of me is blinking too</span></label>
+    <div class="grid2">
+      <div><label class="f" for="reidCount">Blinks to record</label><input type="number" id="reidCount" value="10" min="6" max="20"></div>
+      <div><label class="f" for="reidMax">Search up to advance</label><input type="number" id="reidMax" value="" placeholder="auto"></div>
+    </div>
+    <div class="seg" role="group" aria-label="Recording method">
+      <button type="button" data-method="tap" aria-pressed="true">Tap</button>
+      <button type="button" data-method="cam" aria-pressed="false">Camera</button>
+    </div>
+    <div data-recorder="reid"></div>
+
+    <h2>Too far away? Flip the Pokédex</h2>
+    <p class="small">Flipping between Pokédex entries burns through advances far faster than standing still. Nobody can count flips exactly without modding the Switch, so you flip in bursts and line up after each one to see where you landed.</p>
+    <details class="how">
+      <summary>How to flip</summary>
+      <ol>
+        <li>Stand in front of the Pokémon first, so you don’t need to walk anywhere afterwards.</li>
+        <li>Line up as usual so the app knows where you are. The box below tells you how far you have to go.</li>
+        <li>Tap “Start flipping”, then open the menu, go into the Pokédex and scroll back and forth between entries. A well-filled Pokédex works best.</li>
+        <li>When the time it suggests is up, close the Pokédex and tap “Stop”. The first burst should be about 20 seconds so it can learn your speed.</li>
+        <li>Record blinks again above. It finds where you landed, works out how fast you flip, and suggests the next burst.</li>
+        <li>Stop flipping when you’re within about 600 advances (around 10 minutes), then just wait while recording blinks.</li>
+        <li>If the Pokédex gets laggy after a few minutes of scrolling, close it and open it again.</li>
+        <li>Overshoot the target and it’s gone: go back to step 2 and pick a later one. That’s why the app always aims you short.</li>
+      </ol>
+    </details>
+    <div class="targetcard"><p class="small" id="flipInfo" style="margin:0 0 10px"></p><button type="button" class="btn" id="flipBtn">Start flipping</button></div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="view" id="v-hit">
+    <h1>Hit it</h1>
+    <div class="msg bad" id="hitNoTarget">Pick a target (step 2) and line up (step 3) first.</div>
+    <div id="hitBody" class="hidden">
+      <div class="targetcard"><div class="t" id="hitTarget"></div><div class="small" id="hitTargetSub"></div></div>
+      <div class="big" id="cd">--:--</div>
+      <div class="sub" id="cdSub">until you press A</div>
+      <div class="window" aria-hidden="true"><div class="zone" id="winZone"></div><div class="now" id="winNow"></div></div>
+      <div class="stats">
+        <div><b id="sCur">—</b><span>Current advance</span></div>
+        <div><b id="sPress">—</b><span>Press on advance</span></div>
+        <div><b id="sLeft">—</b><span>Advances left</span></div>
+      </div>
+      <p class="small" id="syncStat"></p>
+      <div class="msg bad hidden" id="hitWarn" role="alert"></div>
+      <div class="msg bad hidden" id="syncWarn">The Pokémon’s blinks make long-range tracking unreliable. Keep recording your trainer’s blinks (tap below, or leave the camera running on step 3) until you press A.</div>
+      <button type="button" class="tap" id="hitTap" style="min-height:120px"><span class="hint" style="margin:0">Tap here every time your trainer’s eyes close to stay synced</span></button>
+      <label class="check"><input type="checkbox" id="beeps" checked><span>Beep and buzz for the last 5 seconds</span></label>
+      <details class="how">
+        <summary>How to press</summary>
+        <ol>
+          <li>Hold the controller with your thumb resting on A.</li>
+          <li>Press A when the countdown hits zero. The highlighted bar shows your window; anywhere inside it lands the same advance, so you have close to a full second.</li>
+          <li>Save before the battle only if you’re happy to lose the timing. Most people just reset if it misses.</li>
+          <li>After the encounter, check its nature and IVs (an IV judge or calculator helps) and tap the matching row below. The app learns your offset for next time.</li>
+        </ol>
+      </details>
+      <h2>What did you get?</h2>
+      <p class="small">Find the row matching the Pokémon you actually got. That sets your offset so the next attempt lands on target.</p>
+      <div class="tablewrap" id="nearWrap"><table><thead><tr><th>Advance</th><th>Shiny</th><th>IVs</th><th>Nature</th><th>Ability</th><th>Gender</th></tr></thead><tbody id="nearBody"></tbody></table></div>
+      <div class="msg" id="offsetMsg"></div>
+    </div>
+    <h2>Fine-tuning</h2>
+    <div class="grid2">
+      <div><label class="f" for="offset">Game offset (advances)</label><input type="number" id="offset" value="0" step="1"></div>
+      <div><label class="f" for="pressLag">Your reaction time (ms)</label><input type="number" id="pressLag" value="150" step="10" min="0" max="600"></div>
+      <div><label class="f" for="camLag">Camera delay (ms)</label><input type="number" id="camLag" value="100" step="10" min="0" max="600"></div>
+      <div><label class="f" for="theme">Display</label><select id="theme"><option value="">Match phone</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
+    </div>
+    <p class="small" style="margin-top:12px">The game offset is how many advances pass between pressing A and the Pokémon being made. It differs between encounters, so start at 0 and let the “What did you get?” table set it. Reaction time is applied to taps and to your A press.</p>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" type="button" id="resetAll">Clear everything</button></div>
+  </section>
+
+  <footer>Runs entirely on this phone. Maths ported from Project_Xs and PokéFinder and checked against both. Fan-made tool, not affiliated with Nintendo, Game Freak or The Pokémon Company.</footer>
+</div>
+
+<template id="recTpl">
+  <div class="rec">
+    <div class="tapmode">
+      <button type="button" class="tap"><span class="count">0/40</span><span class="hint">Tap every time the eyes close. Tap twice quickly for a double blink.</span></button>
+    </div>
+    <div class="cammode hidden">
+      <div class="row"><button type="button" class="btn camstart">Start camera</button><button type="button" class="btn ghost camstop hidden">Stop</button></div>
+      <p class="small">Prop the phone up so your trainer’s face fills a good part of the picture. Tap on the eyes to place the box. Keep glare off the screen.</p>
+      <div class="cam hidden"><video playsinline muted></video><canvas class="ov"></canvas></div>
+      <div class="camctl hidden">
+        <label class="f">Box size</label><input type="range" class="boxsize" min="4" max="40" value="12">
+        <label class="f">Sensitivity (lower is more sensitive)</label><input type="range" class="thr" min="2" max="60" value="14">
+        <div class="meter"><div class="bar"></div><div class="th"></div></div>
+        <p class="small">The bar should jump past the red line on each blink and sit well below it otherwise.</p>
+        <div class="row"><button type="button" class="btn armbtn">Start recording</button><span class="small camcount"></span></div>
+      </div>
+    </div>
+    <div class="vidmode hidden">
+      <p class="small">Film your TV with your phone’s normal camera app for 6 to 10 minutes, phone propped steady, without touching the controller. Then choose the clip here. 60 fps recording works best.</p>
+      <label class="btn ghost" style="display:inline-block">Choose video<input type="file" accept="video/*" class="vidfile" hidden></label>
+      <div class="cam hidden"><video playsinline muted preload="auto"></video><canvas class="ov"></canvas></div>
+      <div class="vidctl hidden">
+        <label class="f">Find a frame</label><input type="range" class="vidpos" min="0" max="1000" value="5">
+        <p class="small">Scrub to where the eyes are open, then tap on them to place the box.</p>
+        <label class="f">Box size</label><input type="range" class="boxsize" min="4" max="40" value="12">
+        <label class="f">Sensitivity (lower is more sensitive)</label><input type="range" class="thr" min="2" max="60" value="14">
+        <div class="meter"><div class="bar"></div><div class="th"></div></div>
+        <label class="check"><input type="checkbox" class="vidfast"><span>Analyse at double speed (quicker, but slower phones may miss blinks)</span></label>
+        <div class="row"><button type="button" class="btn vidgo">Find blinks</button><span class="small vidprog"></span></div>
+      </div>
+    </div>
+    <div class="msg bad warn hidden" role="alert"></div>
+    <div class="log" aria-live="polite"></div>
+    <div class="row" style="margin-top:10px"><button type="button" class="btn ghost undo">Undo last</button><button type="button" class="btn ghost restart">Start over</button></div>
+    <div class="msg result"></div>
+  </div>
+</template>
+
+<script>
+// ===== BDSP blink RNG core (ported from Project_Xs + PokéFinder) =====
+const Core = (() => {
+  const TICK = 61 / 60;          // seconds between player blink checks
+  const PK_BLINK_EXTRA = 0.285;  // added to Pokémon blink intervals
+
+  // ---- Xorshift128 ----
+  class Xorshift {
+    constructor(s0, s1, s2, s3) { this.s = new Uint32Array([s0 >>> 0, s1 >>> 0, s2 >>> 0, s3 >>> 0]); }
+    clone() { return new Xorshift(this.s[0], this.s[1], this.s[2], this.s[3]); }
+    next() {
+      const s = this.s;
+      let t = s[0];
+      const w = s[3];
+      t ^= (t << 11) >>> 0; t >>>= 0;
+      t ^= t >>> 8;
+      t ^= w ^ (w >>> 19);
+      t >>>= 0;
+      s[0] = s[1]; s[1] = s[2]; s[2] = s[3]; s[3] = t;
+      return t;
+    }
+    advance(n) { for (let i = 0; i < n; i++) this.next(); return this; }
+    state() { return [this.s[0], this.s[1], this.s[2], this.s[3]]; }
+  }
+
+  const randrange = (r, mi, ma) => { const t = (r & 0x7fffff) / 8388607.0; return t * mi + (1.0 - t) * ma; };
+  const isBlinkRand = r => (r & 0b1110) === 0;
+
+  // ---- GF(2) recovery from 40 player blinks (calc.getS / gauss_jordan) ----
+  // Represent the 128-bit state as bits; row i of the transition matrix as a 128-bit BigInt.
+  // Bit ordering follows Project_Xs: column 0 = MSB of s0 ... column 127 = LSB of s3.
+  const MASK128 = (1n << 128n) - 1n;
+  function bitAt(rowBig, col) { return (rowBig >> BigInt(127 - col)) & 1n; }
+
+  // Build the 128x128 transition matrix T (rows as BigInt), same as calc.getTrans()
+  function getTrans() {
+    const rows = new Array(128).fill(0n);
+    const setBit = (r, c) => { rows[r] ^= (1n << BigInt(127 - c)); };
+    // s0' = s1, s1' = s2, s2' = s3
+    for (let i = 0; i < 32; i++) { setBit(i, 32 + i); setBit(32 + i, 64 + i); setBit(64 + i, 96 + i); }
+    // s3' = A*s0 ^ B*s3 where A=(I^S(-8))(I^S(11)), B=I^S(-19)  (np.eye k: shift)
+    // eye(k=n): M[i][i+n]=1. In MSB-first indexing, row i bit j.
+    const eyeShift = (n) => { const m = []; for (let i = 0; i < 32; i++) { const j = i + n; m.push(j >= 0 && j < 32 ? j : -1); } return m; };
+    // Build 32x32 matrices as arrays of BigInt-free number masks (32-bit), MSB-first
+    const I = Array.from({ length: 32 }, (_, i) => (1 << (31 - i)) >>> 0);
+    const sh = (n) => eyeShift(n).map(j => j < 0 ? 0 : ((1 << (31 - j)) >>> 0));
+    const xorM = (a, b) => a.map((v, i) => (v ^ b[i]) >>> 0);
+    const mulM = (a, b) => a.map(row => { let out = 0; for (let k = 0; k < 32; k++) if ((row >>> (31 - k)) & 1) out ^= b[k]; return out >>> 0; });
+    const A = mulM(xorM(I, sh(-8)), xorM(I, sh(11)));
+    const B = xorM(I, sh(-19));
+    for (let i = 0; i < 32; i++) {
+      for (let j = 0; j < 32; j++) {
+        if ((A[i] >>> (31 - j)) & 1) setBit(96 + i, j);
+        if ((B[i] >>> (31 - j)) & 1) setBit(96 + i, 96 + j);
+      }
+    }
+    return rows;
+  }
+  // multiply two 128x128 matrices (rows as BigInt): (X@Y) row i = XOR of Y rows k where X[i][k]=1
+  function matMul(X, Y) {
+    return X.map(row => { let out = 0n; let k = 0; let r = row; for (k = 127; k >= 0 && r; k--) { if (r & 1n) out ^= Y[k]; r >>= 1n; } return out; });
+  }
+
+  function gaussJordan(rows, observed, cols = 128) {
+    const bm = rows.slice(); const res = observed.slice();
+    let pivot = 0;
+    for (let i = 0; i < cols; i++) {
+      const check = 1n << BigInt(cols - i - 1);
+      let found = -1;
+      for (let j = pivot; j < bm.length; j++) if (bm[j] & check) { found = j; break; }
+      if (found < 0) continue;
+      [bm[found], bm[pivot]] = [bm[pivot], bm[found]];
+      [res[found], res[pivot]] = [res[pivot], res[found]];
+      for (let j = 0; j < bm.length; j++) if (j !== pivot && (bm[j] & check)) { bm[j] ^= bm[pivot]; res[j] ^= res[pivot]; }
+      pivot++;
+    }
+    if (pivot < cols) return null; // underdetermined
+    // after full reduction row i has pivot at column i
+    let v = 0n;
+    for (let i = 0; i < cols; i++) v = (v << 1n) | BigInt(res[i]);
+    return v;
+  }
+
+  // blinks: array of 0/1 (single/double) length N; rawIntervals: tick counts length N (first ignored)
+  function recover(blinks, rawIntervals) {
+    const intervals = rawIntervals.slice(1);
+    const rowsUsed = Math.min(39, intervals.length, blinks.length);
+    const T = getTrans();
+    // only the 4 rows giving the low 4 bits of the output are ever needed
+    let t = [T[124], T[125], T[126], T[127]];
+    const S = []; const obs = [];
+    for (let i = 0; i < rowsUsed; i++) {
+      for (let b = 0; b < 4; b++) S.push(t[b]);
+      obs.push(0, 0, 0, blinks[i]);
+      for (let j = 0; j < intervals[i]; j++) t = matMul(t, T);
+    }
+    const v = gaussJordan(S, obs);
+    if (v === null) return null;
+    const st = [Number((v >> 96n) & 0xffffffffn), Number((v >> 64n) & 0xffffffffn), Number((v >> 32n) & 0xffffffffn), Number(v & 0xffffffffn)];
+    // validate against every observed blink
+    const rng = new Xorshift(...st);
+    const total = intervals.reduce((a, b) => a + b, 0);
+    const expected = [];
+    for (let i = 0; i <= total; i++) { const r = rng.next(); if (isBlinkRand(r)) expected.push(r & 0xf); }
+    for (let i = 0; i < blinks.length && i < expected.length; i++) if (expected[i] !== blinks[i]) return null;
+    // starting state is "before first blink call"; return state after the last observed blink call
+    const out = new Xorshift(...st).advance(total + 1);
+    return { initial: st, state: out.state() };
+  }
+
+  // ---- reidentify, player only (reidentifyByIntervals, th=0) ----
+  // returns { state (after last blink call), advances (calls consumed from base) , matches }
+  function reidentify(baseState, rawIntervals, searchMax = 1e6) {
+    const intervals = rawIntervals.slice(1);
+    const offs = [0]; for (const iv of intervals) offs.push(offs[offs.length - 1] + iv);
+    const span = offs[offs.length - 1];
+    const rng = new Xorshift(...baseState);
+    const total = searchMax + span + 1; // searchMax limits where the first blink may start
+    const blink = new Uint8Array(total);
+    for (let i = 0; i < total; i++) blink[i] = isBlinkRand(rng.next()) ? 1 : 0;
+    const marks = new Uint8Array(span + 1); for (const o of offs) marks[o] = 1;
+    let first = -1, count = 0;
+    for (let i = 0; i < searchMax; i++) {
+      if (!blink[i]) continue;
+      let ok = true;
+      for (let k = 1; k <= span; k++) if (blink[i + k] !== marks[k]) { ok = false; break; }
+      if (ok) { count++; if (first < 0) first = i + span; if (count > 1) break; }
+    }
+    if (first < 0) return null;
+    return { advances: first + 1, firstIndex: first - span, blinkIdx: offs.map(o => first - span + o), state: new Xorshift(...baseState).advance(first + 1).state(), unique: count === 1 };
+  }
+
+  // ---- reidentify with one Pokémon blinking on screen (reidentifyByIntervalsNoisy) ----
+  function reidentifyNoisy(baseState, rawIntervals, searchMax = 1e5) {
+    const pl = rawIntervals.slice(1); const n = pl.length;
+    const sum = pl.reduce((a, b) => a + b, 0);
+    const genRange = searchMax + sum * 2 + 64;
+    const rng = new Xorshift(...baseState);
+    const pk = new Float64Array(genRange); const isB = new Uint8Array(genRange);
+    for (let i = 0; i < genRange; i++) { const r = rng.next(); pk[i] = randrange(r, 3, 12) + PK_BLINK_EXTRA; isB[i] = isBlinkRand(r) ? 1 : 0; }
+    // simulate the observed window from blink index bi with the Pokémon's next blink at `starting` s after the first observed blink
+    function run(bi, starting, rec) {
+      let pkTimer = starting, offset = 0, t = 0, prev = bi, j = bi, got = 0;
+      if (rec) rec.push(bi);
+      while (got < n) {
+        t += TICK; j++;
+        if (j >= genRange - 2) return null;
+        if (pkTimer < t) { pkTimer += pk[j]; j++; offset++; }
+        if (isB[j]) {
+          if (j - prev - offset !== pl[got]) return null;
+          got++; offset = 0; prev = j; if (rec) rec.push(j);
+        } else if (j - prev - offset > pl[got]) return null;
+      }
+      return { adv: j + 1, next: pkTimer - t };
+    }
+    let STEP = 0.01, STEPS = 1230; // 0 to 12.3 s, the longest a Pokémon goes between blinks
+    const groups = new Map(); // advances -> list of matching phases
+    for (let pass = 0; pass < 2 && !groups.size; pass++) {
+    if (pass === 1) { if (searchMax > 2000) break; STEP = 0.0005; STEPS = 24600; } // fine retry for small local searches
+    for (let bi = 0; bi < searchMax; bi++) {
+      if (!isB[bi]) continue;
+      for (let si = 0; si < STEPS; si++) {
+        const r = run(bi, si * STEP);
+        if (!r) continue;
+        const key = bi + '|' + r.adv;
+        if (!groups.has(key)) groups.set(key, { bi, adv: r.adv, phases: [] });
+        groups.get(key).phases.push(si * STEP);
+      }
+      if (new Set([...groups.values()].map(x => x.adv)).size > 3) break;
+    }
+    }
+    if (!groups.size) return null;
+    const all = [...groups.values()].sort((x, y) => y.phases.length - x.phases.length);
+    const g = all[0], advances = g.adv;
+    const advSet = new Set(all.map(x => x.adv));
+    // phases that fit form one or more runs; take the middle of the widest run
+    let best = [g.phases[0], g.phases[0]], cur = [g.phases[0], g.phases[0]];
+    for (let k = 1; k < g.phases.length; k++) {
+      if (g.phases[k] - cur[1] < STEP * 1.5 + 1e-9) cur[1] = g.phases[k]; else cur = [g.phases[k], g.phases[k]];
+      if (cur[1] - cur[0] > best[1] - best[0]) best = cur.slice();
+    }
+    let blinkIdx = [];
+    let mid = run(g.bi, (best[0] + best[1]) / 2, blinkIdx);
+    if (!mid) { blinkIdx = []; mid = run(g.bi, best[0], blinkIdx); }
+    return {
+      advances, firstIndex: g.bi, blinkIdx, nextPkBlink: mid.next, uncertainty: (best[1] - best[0]) / 2,
+      state: new Xorshift(...baseState).advance(advances).state(),
+      unique: advSet.size === 1, alternatives: [...advSet].filter(a => a !== advances)
+    };
+  }
+
+  // ---- live timeline: each event consumes one RNG call ----
+  // anchor = { state, adv, t0 (ms, time of last observed player blink), pkNext (sec after t0) | null }
+  // Returns function to compute advance count at a given time and time of a given advance.
+  function makeTimeline(anchor) {
+    const cache = { times: [], rng: null, nextPl: 1, pkAt: null };
+    // events list: times (ms) when advance index anchor.adv + k happens (k = 1,2,...)
+    function extend(untilCount, untilTime) {
+      if (!cache.rng) { cache.rng = new Xorshift(...anchor.state); cache.pkAt = anchor.pkNext == null ? null : anchor.pkNext; }
+      while (cache.times.length < untilCount || (untilTime != null && (cache.times.length === 0 || cache.times[cache.times.length - 1] < untilTime))) {
+        const plAt = cache.nextPl * TICK;
+        if (cache.pkAt != null && cache.pkAt < plAt) {
+          const r = cache.rng.next();
+          cache.times.push(anchor.t0 + cache.pkAt * 1000);
+          cache.pkAt += randrange(r, 3, 12) + PK_BLINK_EXTRA;
+        } else {
+          cache.rng.next();
+          cache.times.push(anchor.t0 + plAt * 1000);
+          cache.nextPl++;
+        }
+        if (cache.times.length > 3e6) break;
+      }
+    }
+    return {
+      advanceAt(ms) { // number of advances completed by time ms
+        if (ms < anchor.t0) return anchor.adv;
+        extend(0, ms);
+        let lo = 0, hi = cache.times.length; // first index with time > ms
+        while (lo < hi) { const m = (lo + hi) >> 1; if (cache.times[m] <= ms) lo = m + 1; else hi = m; }
+        return anchor.adv + lo;
+      },
+      timeOf(adv) { // time when the advance count becomes adv
+        const k = adv - anchor.adv; if (k <= 0) return anchor.t0;
+        extend(k, null); return cache.times[k - 1];
+      },
+      rate() { return anchor.pkNext == null ? 1 / TICK : 1 / TICK + 1 / 7.785; }
+    };
+  }
+
+  // ---- BDSP static generation (PokéFinder StaticGenerator8::generateNonRoamer) ----
+  const NATURES = ['Hardy','Lonely','Brave','Adamant','Naughty','Bold','Docile','Relaxed','Impish','Lax','Timid','Hasty','Serious','Jolly','Naive','Modest','Mild','Quiet','Bashful','Rash','Calm','Gentle','Sassy','Careful','Quirky'];
+  const gen32 = r => (((r % 0xFFFFFFFF) + 0x80000000) % 0x100000000);
+
+  // tpl: { ivCount, ability (0|1|2|255), gender ratio (0..255), fateful, shinyLocked }
+  // lead: { type: 'none'|'sync'|'cutecharmF'|'cutecharmM', nature }
+  function genFromList(L, tpl, lead) {
+    let p = 0; const nx = () => L[p++];
+    const ec = nx(); const sidtid = nx(); const pid = nx();
+    let shiny = 0;
+    if (!tpl.shinyLocked) {
+      const ftsv = (sidtid >>> 16) ^ (sidtid & 0xffff);
+      const psv = (pid >>> 16) ^ (pid & 0xffff);
+      const x = ftsv ^ psv;
+      shiny = x === 0 ? 2 : (x < 16 ? 1 : 0);
+      if (shiny && tpl.fateful) shiny = 2;
+    }
+    const ivs = [-1, -1, -1, -1, -1, -1];
+    for (let i = 0; i < tpl.ivCount;) { const idx = nx() % 6; if (ivs[idx] === -1) { ivs[idx] = 31; i++; } }
+    for (let i = 0; i < 6; i++) if (ivs[i] === -1) ivs[i] = nx() % 32;
+    let ability;
+    if (tpl.ability === 0 || tpl.ability === 1) ability = tpl.ability;
+    else if (tpl.ability === 2) { ability = 2; nx(); }
+    else ability = nx() % 2;
+    let gender; const g = tpl.gender;
+    if (g === 255) gender = 2; else if (g === 254) gender = 1; else if (g === 0) gender = 0;
+    else if ((lead.type === 'cutecharmF' || lead.type === 'cutecharmM') && nx() % 3 > 0) gender = lead.type === 'cutecharmF' ? 0 : 1;
+    else gender = (nx() % 253) + 1 < g ? 1 : 0;
+    const nature = lead.type === 'sync' ? lead.nature : nx() % 25;
+    let height = nx() % 129; height += nx() % 128;
+    let weight = nx() % 129; weight += nx() % 128;
+    return { ec, pid, sidtid, shiny, ivs, ability, gender, nature, height, weight };
+  }
+
+  // Generate states for advances [start, start+count]
+  function* generateRange(state, start, count, tpl, lead) {
+    const rng = new Xorshift(...state).advance(start);
+    const ring = new Array(32);
+    for (let i = 0; i < 32; i++) ring[i] = gen32(rng.next());
+    let head = 0;
+    const view = new Array(32);
+    for (let c = 0; c <= count; c++) {
+      for (let i = 0; i < 32; i++) view[i] = ring[(head + i) & 31];
+      yield { advance: start + c, ...genFromList(view, tpl, lead) };
+      ring[head] = gen32(rng.next()); head = (head + 1) & 31;
+    }
+  }
+
+  return { Xorshift, TICK, randrange, isBlinkRand, recover, reidentify, reidentifyNoisy, makeTimeline, generateRange, NATURES, gen32 };
+})();
+
+</script>
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const now = () => performance.timeOrigin + performance.now();
+const fmt = n => Math.round(n).toLocaleString('en-AU');
+const hex = v => '0x' + (v >>> 0).toString(16).padStart(8, '0');
+
+// ---------- storage ----------
+const KEY = 'blinkreader.v1';
+let S = { seed: null, anchor: null, target: null, settings: {} };
+try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(S, JSON.parse(raw)); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+const setting = (k, d) => (S.settings && S.settings[k] !== undefined ? S.settings[k] : d);
+const setSetting = (k, v) => { S.settings = S.settings || {}; S.settings[k] = v; save(); };
+
+// ---------- encounter data (PokéFinder EncounterTables, Gen 8 BDSP) ----------
+// g = gender ratio (255 genderless, 254 female only, 0 male only), ab = ability (255 random, 0/1 fixed, 2 hidden)
+const ENC = [
+  ['Starters', [['Turtwig',0,31],['Chimchar',0,31],['Piplup',0,31]]],
+  ['Gifts', [['Eevee',0,31],['Happiny (egg)',0,254],['Riolu (egg)',0,31]]],
+  ['Fossils', [['Omanyte',3,31],['Kabuto',3,31],['Aerodactyl',3,31],['Lileep',3,31],['Anorith',3,31],['Cranidos',3,31],['Shieldon',3,31]]],
+  ['Overworld', [['Drifloon',3,127],['Spiritomb',0,127],['Rotom',0,255]]],
+  ['Legendary', [['Uxie',3,255],['Azelf',3,255],['Dialga',3,255,{v:'BD'}],['Palkia',3,255,{v:'SP'}],['Heatran',3,127],['Regigigas',3,255],['Giratina',3,255]]],
+  ['Ramanas Park', [['Articuno',3,255,{v:'SP',ab:2}],['Zapdos',3,255,{v:'SP',ab:2}],['Moltres',3,255,{v:'SP',ab:2}],['Raikou',3,255,{v:'BD',ab:2}],['Entei',3,255,{v:'BD',ab:2}],['Suicune',3,255,{v:'BD',ab:2}],['Regirock',3,255,{ab:2}],['Regice',3,255,{ab:2}],['Registeel',3,255,{ab:2}],['Latias',3,254],['Latios',3,0],['Mewtwo',3,255,{ab:2}],['Lugia',3,255,{v:'SP',ab:2}],['Ho-Oh',3,255,{v:'BD',ab:2}],['Kyogre',3,255],['Groudon',3,255],['Rayquaza',3,255]]],
+  ['Mythical', [['Darkrai',3,255,{f:1}],['Shaymin',3,255,{f:1}],['Arceus',3,255,{f:1}],['Mew (can’t be shiny)',3,255,{f:1,ab:1,lock:1}],['Jirachi (can’t be shiny)',3,255,{f:1,ab:1,lock:1}]]],
+];
+// Recommended IV build per Pokémon (common competitive use; a suggestion, not a rule)
+const BUILD = {
+  'Turtwig': 'physical', 'Chimchar': 'mixed', 'Piplup': 'special', 'Eevee': 'overall', 'Happiny (egg)': 'defensive', 'Riolu (egg)': 'mixed',
+  'Omanyte': 'special', 'Kabuto': 'physical', 'Aerodactyl': 'physical', 'Lileep': 'defensive', 'Anorith': 'physical', 'Cranidos': 'physical', 'Shieldon': 'defensive',
+  'Drifloon': 'special', 'Spiritomb': 'defensive', 'Rotom': 'special',
+  'Uxie': 'defensive', 'Azelf': 'special', 'Dialga': 'special', 'Palkia': 'special', 'Heatran': 'special', 'Regigigas': 'physical', 'Giratina': 'defensive',
+  'Articuno': 'special', 'Zapdos': 'special', 'Moltres': 'special', 'Raikou': 'special', 'Entei': 'physical', 'Suicune': 'defensive',
+  'Regirock': 'physical', 'Regice': 'special', 'Registeel': 'defensive', 'Latias': 'special', 'Latios': 'special', 'Mewtwo': 'special',
+  'Lugia': 'defensive', 'Ho-Oh': 'physical', 'Kyogre': 'special', 'Groudon': 'physical', 'Rayquaza': 'physical',
+  'Darkrai': 'special', 'Shaymin': 'special', 'Arceus': 'special', 'Mew (can’t be shiny)': 'mixed', 'Jirachi (can’t be shiny)': 'mixed'
+};
+// Pokémon commonly built more than one way. First entry is the default.
+const SETS = {
+  'Chimchar': [['mixed', 'Infernape, mixed'], ['physical', 'Infernape, physical'], ['special', 'Infernape, special (Nasty Plot)']],
+  'Riolu (egg)': [['mixed', 'Lucario, mixed'], ['physical', 'Lucario, physical (Swords Dance)'], ['special', 'Lucario, special (Nasty Plot)']],
+  'Eevee': [['overall', 'Not sure yet'], ['defensive', 'Vaporeon'], ['special', 'Jolteon'], ['physical', 'Flareon'], ['special', 'Espeon'], ['defensive', 'Umbreon'], ['physical', 'Leafeon'], ['special', 'Glaceon']],
+  'Spiritomb': [['defensive', 'Defensive'], ['mixed', 'Mixed attacker']],
+  'Rotom': [['special', 'Special attacker'], ['defensive', 'Defensive']],
+  'Uxie': [['defensive', 'Defensive'], ['special', 'Special attacker']],
+  'Azelf': [['special', 'Special attacker'], ['mixed', 'Mixed lead'], ['physical', 'Physical attacker']],
+  'Dialga': [['special', 'Special attacker'], ['mixed', 'Mixed attacker']],
+  'Palkia': [['special', 'Special attacker'], ['mixed', 'Mixed attacker']],
+  'Heatran': [['special', 'Special attacker'], ['defensive', 'Defensive']],
+  'Giratina': [['defensive', 'Defensive'], ['physical', 'Physical attacker'], ['mixed', 'Mixed attacker'], ['special', 'Special attacker (Calm Mind)']],
+  'Zapdos': [['special', 'Special attacker'], ['defensive', 'Defensive']],
+  'Moltres': [['special', 'Special attacker'], ['defensive', 'Defensive']],
+  'Suicune': [['defensive', 'Defensive (Calm Mind)'], ['special', 'Special attacker']],
+  'Regirock': [['physical', 'Physical attacker'], ['defensive', 'Defensive']],
+  'Latias': [['special', 'Special attacker'], ['defensive', 'Defensive (Calm Mind)']],
+  'Mewtwo': [['special', 'Special attacker'], ['physical', 'Physical attacker'], ['mixed', 'Mixed attacker']],
+  'Lugia': [['defensive', 'Defensive'], ['special', 'Special attacker (Calm Mind)']],
+  'Ho-Oh': [['physical', 'Physical attacker'], ['defensive', 'Defensive'], ['mixed', 'Mixed attacker']],
+  'Groudon': [['physical', 'Physical attacker'], ['defensive', 'Defensive (Stealth Rock lead)']],
+  'Rayquaza': [['physical', 'Physical (Dragon Dance)'], ['mixed', 'Mixed attacker'], ['special', 'Special attacker']],
+  'Shaymin': [['special', 'Special attacker'], ['mixed', 'Mixed attacker']],
+  'Arceus': [['special', 'Special (Calm Mind)'], ['physical', 'Physical (Swords Dance, Extreme Speed)'], ['mixed', 'Mixed attacker'], ['defensive', 'Defensive']],
+  'Mew (can’t be shiny)': [['mixed', 'Mixed attacker'], ['defensive', 'Defensive'], ['physical', 'Physical attacker'], ['special', 'Special attacker']],
+  'Jirachi (can’t be shiny)': [['mixed', 'Mixed attacker'], ['physical', 'Physical (Iron Head)'], ['special', 'Special (Calm Mind)'], ['defensive', 'Defensive']]
+};
+const BUILDS = {
+  special: { label: 'Special attacker', weights: [2, -2, 1, 3, 1, 3], what: 'Sp. Atk, Speed and HP first, Attack as low as possible', natures: 'Modest or Timid' },
+  physical: { label: 'Physical attacker', weights: [2, 3, 1, 0, 1, 3], what: 'Attack, Speed and HP first', natures: 'Adamant or Jolly' },
+  mixed: { label: 'Mixed attacker', weights: [2, 2, 1, 2, 1, 3], what: 'Attack, Sp. Atk and Speed together, then HP', natures: 'Naive, Hasty or Rash' },
+  defensive: { label: 'Defensive', weights: [3, -1, 3, 0, 3, 1], what: 'HP, Defence and Sp. Def first, Attack low', natures: 'Bold, Calm, Impish or Careful' },
+  overall: { label: 'Best overall', weights: [1, 1, 1, 1, 1, 1], what: 'highest IV total', natures: 'whatever suits its final evolution' }
+};
+const TPL = {};
+ENC.forEach(([grp, list]) => list.forEach(([name, ivc, g, o = {}]) => {
+  TPL[grp + '|' + name] = { name, grp, ivCount: ivc, gender: g, ability: o.ab ?? 255, fateful: !!o.f, shinyLocked: !!o.lock, version: o.v || 'both', build: BUILD[name] || 'overall' };
+}));
+
+const N = Core.NATURES;
+const shinyTxt = s => s === 2 ? '■ square' : s === 1 ? '★ star' : '';
+const genderTxt = g => g === 0 ? '♂' : g === 1 ? '♀' : '–';
+const abilityTxt = (a, tpl) => tpl.ability === 2 ? 'Hidden' : (tpl.ability === 0 || tpl.ability === 1) ? 'Fixed' : String(a + 1);
+const ivTxt = ivs => ivs.join('/');
+function dur(ms) {
+  if (ms < 0) return 'passed';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + ' s';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + ' min';
+  return Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+}
+
+// ---------- timeline ----------
+let tlCache = { key: null, tl: null };
+function timeline() {
+  if (!S.anchor) return null;
+  const key = JSON.stringify(S.anchor);
+  if (tlCache.key !== key) tlCache = { key, tl: Core.makeTimeline(S.anchor) };
+  return tlCache.tl;
+}
+const currentAdvance = () => { const tl = timeline(); return tl ? tl.advanceAt(now()) : null; };
+
+// ---------- wake lock & sound ----------
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && !wakeLock && 'wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+    if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && wantAwake()) keepAwake(true); });
+const wantAwake = () => ['seed', 'lineup', 'hit'].includes(route());
+let actx = null;
+function beep(freq, len) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = freq; o.type = 'square'; g.gain.value = 0.08;
+    o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + len);
+  } catch (e) {}
+  try { navigator.vibrate && navigator.vibrate(Math.round(len * 1000)); } catch (e) {}
+}
+document.addEventListener('pointerdown', () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume && actx.resume(); } catch (e) {} }, { once: true });
+
+// ---------- blink recorder (tap or camera) ----------
+// Watchdog thresholds in ms / fps. window.__wd can override them for testing.
+const WD = Object.assign({ quiet: 60000, moved: 2500, minFps: 15 }, window.__wd || {});
+function makeRecorder(host, opts) {
+  host.appendChild($('#recTpl').content.cloneNode(true));
+  const el = host.lastElementChild;
+  const tapBtn = $('.tap', el), countEl = $('.count', el), logEl = $('.log', el), resEl = $('.result', el);
+  let blinks = [], finished = false, doneTimer = null, mode = 'tap';
+
+  const intervals = () => blinks.map((b, i) => {
+    if (i === 0) return { n: 0, raw: 0, off: false };
+    const raw = (b.t - blinks[i - 1].t) / 1000 / Core.TICK;
+    const n = Math.max(1, Math.round(raw));
+    return { n, raw, off: Math.abs(raw - Math.round(raw)) > 0.25 };
+  });
+  function render() {
+    const need = opts.need();
+    countEl.textContent = `${blinks.length}/${need}`;
+    $('.camcount', el).textContent = armed ? `${blinks.length}/${need} recorded` : '';
+    const iv = intervals();
+    logEl.innerHTML = blinks.length ? blinks.map((b, i) => `<span class="${iv[i].off ? 'bad' : ''} ${b.dbl ? 'd' : ''}">${i === 0 ? '•' : iv[i].n}${b.dbl ? 'd' : ''}${iv[i].off ? '?' : ''}</span>`).join(' ') : '<span class="small">Blinks show here as gaps in ticks. A “d” marks a double, a “?” marks timing that looks off.</span>';
+    logEl.scrollLeft = logEl.scrollWidth;
+  }
+  // ---- watchdog warnings ----
+  const warnEl = $('.warn', el);
+  const WARN_ORDER = ['frozen', 'moved', 'fast', 'slow', 'skip', 'timing', 'quiet'];
+  const warns = {}; const buzzedAt = {};
+  function warn(key, text) {
+    const isNew = !warns[key];
+    warns[key] = text; showWarn();
+    if (isNew && (!buzzedAt[key] || now() - buzzedAt[key] > 20000)) { buzzedAt[key] = now(); beep(330, 0.18); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {} }
+  }
+  function clearWarn(key) { if (warns[key]) { delete warns[key]; showWarn(); } }
+  function clearAllWarns() { for (const k of Object.keys(warns)) delete warns[k]; showWarn(); }
+  function topWarn() { for (const k of WARN_ORDER) if (warns[k]) return warns[k]; return ''; }
+  function showWarn() { const t = topWarn(); warnEl.textContent = t; warnEl.classList.toggle('hidden', !t); }
+  let lastEventWall = null; // wall-clock time of last blink (or of starting to record)
+  let lastEventMedia = 0;   // video time of last blink, for uploaded clips
+  function checkTiming() {
+    const iv = intervals().slice(1).slice(-6);
+    const bad = iv.filter(x => x.off).length;
+    if (iv.length >= 4 && bad >= 3) warn('timing', mode === 'tap'
+      ? `${bad} of the last ${iv.length} gaps don’t fit the game’s timing. Tap the instant the eyes close, at the same speed each time. If you think you missed a blink, tap “Start over”.`
+      : `${bad} of the last ${iv.length} gaps don’t fit the game’s timing, so detection is unreliable. Usually glare, a low frame rate or the box slightly off the eyes. Fix it and tap “Start over”.`);
+    else clearWarn('timing');
+  }
+  function blinkStart(t) {
+    if (finished) return;
+    const prev = blinks[blinks.length - 1];
+    if (prev && mode !== 'tap' && t - prev.t < 950) warn('fast', 'Two blinks were detected less than a second apart, which the game can’t do. It’s picking up something else: glare, movement, or the box is too sensitive. Drag the sensitivity slider right a little or re-place the box, then tap “Start over”.');
+    lastEventWall = now(); if (mode === 'vid') lastEventMedia = t;
+    clearWarn('quiet');
+    blinks.push({ t, dbl: false });
+    if (blinks.length >= opts.need()) {
+      clearTimeout(doneTimer);
+      doneTimer = setTimeout(finish, 950); // allow a double blink to register
+    }
+    render(); checkTiming();
+  }
+  function markDouble() { const b = blinks[blinks.length - 1]; if (b && !b.dbl) { b.dbl = true; render(); } }
+  function finish() {
+    if (mode === 'vid' && !(opts.keepGoing && opts.keepGoing())) {
+      finished = true; stopVideo();
+      const iv = intervals(); const lastMedia = blinks[blinks.length - 1].t;
+      // a recorded clip only knows times relative to itself; estimate wall-clock time from when the file was saved
+      const end = vFile && vFile.lastModified ? vFile.lastModified : now();
+      const lastT = end - (vEl.duration * 1000 - lastMedia);
+      opts.onDone(blinks.map(b => (b.dbl ? 1 : 0)), iv.map(x => x.n), lastT, iv, resEl, { approx: true });
+      return;
+    }
+    if (opts.keepGoing && opts.keepGoing()) {
+      const iv = intervals();
+      opts.onDone(blinks.map(b => (b.dbl ? 1 : 0)), iv.map(x => x.n), blinks[blinks.length - 1].t, iv, resEl);
+      return;
+    }
+    finished = true; stopArmed();
+    const iv = intervals();
+    opts.onDone(blinks.map(b => (b.dbl ? 1 : 0)), iv.map(x => x.n), blinks[blinks.length - 1].t, iv, resEl);
+  }
+  function reset() { blinks = []; finished = false; clearTimeout(doneTimer); resEl.textContent = ''; resEl.className = 'msg result'; clearAllWarns(); lastEventWall = null; lastEventMedia = 0; render(); if (opts.onReset) opts.onReset(); }
+
+  // tap mode
+  function tapEvent(e, btn) {
+    e.preventDefault();
+    if (finished) return;
+    const t = performance.timeOrigin + e.timeStamp - (+setting('pressLag', 150));
+    const last = blinks[blinks.length - 1];
+    if (last && t - last.t < 650) { markDouble(); }
+    else blinkStart(t);
+    btn.classList.add('flash'); setTimeout(() => btn.classList.remove('flash'), 90);
+  }
+  tapBtn.addEventListener('pointerdown', (e) => tapEvent(e, tapBtn));
+  $('.undo', el).addEventListener('click', () => { if (finished) return; blinks.pop(); clearTimeout(doneTimer); render(); });
+  $('.restart', el).addEventListener('click', reset);
+
+  // ---- shared blink detector: watches a box on a video element ----
+  // closed eye = the box looks different from the learned open-eye picture (like Project_Xs template matching)
+  function makeDetector(scope, videoEl, roiKey) {
+    const ov = $('canvas.ov', scope), sizeIn = $('.boxsize', scope), thrIn = $('.thr', scope);
+    const meterBar = $('.meter .bar', scope), meterTh = $('.meter .th', scope);
+    sizeIn.value = setting('camBox', 12); thrIn.value = setting('camThr', 14);
+    let roi = setting(roiKey, { x: 0.5, y: 0.45 });
+    const work = document.createElement('canvas'); work.width = 24; work.height = 24;
+    const wctx = work.getContext('2d', { willReadFrequently: true });
+    let tmpl = null, state = 0, stateStart = 0; // 0 open, 1 single, 2 double
+    let changedSince = null; // when the box first looked different, for spotting a moved phone or picture
+    const d = {
+      onBlink: null, onDouble: null, onMoved: null,
+      draw() {
+        const w = ov.clientWidth, h = ov.clientHeight; if (!w) return;
+        ov.width = w * devicePixelRatio; ov.height = h * devicePixelRatio;
+        const c = ov.getContext('2d'); c.scale(devicePixelRatio, devicePixelRatio);
+        const bw = w * sizeIn.value / 100;
+        c.strokeStyle = state ? '#ff9ec6' : '#7cc4ff'; c.lineWidth = 2;
+        c.strokeRect(roi.x * w - bw / 2, roi.y * h - bw / 2, bw, bw);
+      },
+      reset() { tmpl = null; state = 0; changedSince = null; },
+      step(t) { // t = ms
+        const vw = videoEl.videoWidth, vh = videoEl.videoHeight; if (!vw) return;
+        const bw = vw * sizeIn.value / 100;
+        wctx.drawImage(videoEl, roi.x * vw - bw / 2, roi.y * vh - bw / 2, bw, bw, 0, 0, 24, 24);
+        const px = wctx.getImageData(0, 0, 24, 24).data;
+        const g = new Float32Array(576);
+        for (let i = 0; i < 576; i++) g[i] = px[i * 4] * 0.3 + px[i * 4 + 1] * 0.59 + px[i * 4 + 2] * 0.11;
+        if (!tmpl) { tmpl = g; return; }
+        let diff = 0; for (let i = 0; i < 576; i++) diff += Math.abs(g[i] - tmpl[i]); diff /= 576;
+        const thr = +thrIn.value; const closed = diff > thr;
+        meterBar.style.width = Math.min(100, diff / 80 * 100) + '%';
+        meterTh.style.left = (thr / 80 * 100) + '%';
+        if (state === 0 && !closed) for (let i = 0; i < 576; i++) tmpl[i] = tmpl[i] * 0.9 + g[i] * 0.1;
+        if (closed) {
+          if (state === 0) { state = 1; stateStart = t; d.onBlink && d.onBlink(t); d.draw(); }
+          else if (state === 1 && t - stateStart > 300) { state = 2; d.onDouble && d.onDouble(); }
+        }
+        if (state !== 0 && t - stateStart > 700) { state = 0; d.draw(); }
+        // a blink lasts well under a second; staying different for 2.5 s means the view moved
+        if (closed) { if (changedSince == null) changedSince = t; else if (t - changedSince > (WD.moved)) { changedSince = null; tmpl = null; state = 0; d.onMoved && d.onMoved(); } }
+        else changedSince = null;
+      }
+    };
+    ov.addEventListener('pointerdown', (e) => {
+      const r = ov.getBoundingClientRect();
+      roi = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+      setSetting(roiKey, roi); tmpl = null; d.draw();
+    });
+    sizeIn.addEventListener('input', () => { setSetting('camBox', +sizeIn.value); tmpl = null; d.draw(); });
+    thrIn.addEventListener('input', () => setSetting('camThr', +thrIn.value));
+    return d;
+  }
+
+  // ---- live camera ----
+  const camScope = $('.cammode', el);
+  const video = $('video', camScope), camBox = $('.cam', camScope), camCtl = $('.camctl', camScope);
+  const det = makeDetector(camScope, video, 'camRoi');
+  let stream = null, armed = false, running = false;
+  det.onBlink = (t) => { if (armed) blinkStart(t); };
+  det.onDouble = () => { if (armed) markDouble(); };
+  det.onMoved = () => { if (armed) warn('moved', 'The picture in the box changed and stayed changed, so the phone or the picture has probably moved. Check the box is still on your trainer’s eyes (tap them to re-place it). If a blink may have been missed, tap “Start over”.'); };
+  const frameTimes = [];
+  function loop() {
+    if (!running) return;
+    const tw = now(); frameTimes.push(tw); while (frameTimes.length && tw - frameTimes[0] > 2000) frameTimes.shift();
+    det.step(tw - (+setting('camLag', 100)));
+    if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(loop); else requestAnimationFrame(loop);
+  }
+  async function startCam() {
+    resEl.textContent = '';
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, frameRate: { ideal: 60 } }, audio: false });
+    } catch (e) {
+      resEl.className = 'msg result bad';
+      resEl.textContent = 'The camera couldn’t start here. If you said no to the permission prompt, allow camera access in Chrome’s site settings. If no prompt appeared, this page may be blocking the camera; tap mode still works, or try the uploaded-video option for step 1.';
+      return;
+    }
+    video.srcObject = stream; await video.play().catch(() => {});
+    camBox.classList.remove('hidden'); camCtl.classList.remove('hidden');
+    $('.camstart', el).classList.add('hidden'); $('.camstop', el).classList.remove('hidden');
+    running = true; det.reset(); setTimeout(() => det.draw(), 300); loop();
+    const fr = stream.getVideoTracks()[0].getSettings().frameRate;
+    if (fr) { resEl.className = 'msg result'; resEl.textContent = `Camera running at about ${Math.round(fr)} frames per second.`; }
+  }
+  function stopCam() {
+    running = false; armed = false; $('.armbtn', el).textContent = 'Start recording';
+    if (stream) stream.getTracks().forEach(t => t.stop()); stream = null;
+    camBox.classList.add('hidden'); camCtl.classList.add('hidden');
+    $('.camstart', el).classList.remove('hidden'); $('.camstop', el).classList.add('hidden');
+  }
+  function stopArmed() { armed = false; $('.armbtn', el).textContent = 'Start recording'; $('.camcount', el).textContent = ''; }
+  $('.camstart', el).addEventListener('click', startCam);
+  $('.camstop', el).addEventListener('click', stopCam);
+  $('.armbtn', el).addEventListener('click', () => {
+    if (armed) { stopArmed(); return; }
+    reset(); armed = true; lastEventWall = now(); $('.armbtn', el).textContent = 'Pause recording'; render();
+  });
+
+  // ---- uploaded video (seed step only) ----
+  const vidScope = $('.vidmode', el);
+  const vEl = $('video', vidScope), vBox = $('.cam', vidScope), vCtl = $('.vidctl', vidScope);
+  const vDet = makeDetector(vidScope, vEl, 'vidRoi');
+  let vFile = null, vUrl = null, analysing = false;
+  vDet.onBlink = (t) => { if (analysing) blinkStart(t); };
+  vDet.onDouble = () => { if (analysing) markDouble(); };
+  vDet.onMoved = () => { if (analysing) warn('moved', 'Partway through the clip the picture in the box changed and stayed changed, so the phone or the picture moved while filming. Blinks after that point may be missed. Re-film with the phone propped steady.'); };
+  let lastMediaT = null; const gaps = [];
+  $('.vidfile', vidScope).addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    stopVideo(); vFile = f; if (vUrl) URL.revokeObjectURL(vUrl); vUrl = URL.createObjectURL(f);
+    resEl.className = 'msg result'; resEl.textContent = 'Loading video…';
+    vEl.src = vUrl; vEl.load();
+  });
+  vEl.addEventListener('loadedmetadata', () => {
+    vBox.classList.remove('hidden'); vCtl.classList.remove('hidden');
+    const mins = vEl.duration / 60;
+    resEl.className = mins < 4 ? 'msg result bad' : 'msg result';
+    resEl.textContent = `Video loaded: ${mins.toFixed(1)} minutes.` + (mins < 4 ? ' That’s probably too short for 40 blinks; aim for 6 to 10 minutes.' : ' Scrub to a frame with the eyes open and tap on them.');
+    vEl.currentTime = Math.min(2, vEl.duration / 2);
+  });
+  vEl.addEventListener('error', () => { resEl.className = 'msg result bad'; resEl.textContent = 'This phone’s browser can’t play that video file. Try recording in the standard camera mode (not HDR or slow motion).'; });
+  vEl.addEventListener('seeked', () => { if (!analysing) { vDet.reset(); vDet.step(0); vDet.draw(); } });
+  $('.vidpos', vidScope).addEventListener('input', (e) => { if (!analysing && vEl.duration) vEl.currentTime = vEl.duration * e.target.value / 1000; });
+  function vLoop(_, meta) {
+    if (!analysing) return;
+    const t = (meta && meta.mediaTime != null ? meta.mediaTime : vEl.currentTime) * 1000;
+    if (lastMediaT != null) { gaps.push(t - lastMediaT); if (gaps.length > 30) gaps.shift(); }
+    lastMediaT = t;
+    if (gaps.length >= 30) {
+      const big = gaps.filter(g => g > 120).length;
+      if (big >= 6) warn('skip', $('.vidfast', vidScope).checked ? 'This phone is skipping frames at double speed, so short blinks can be missed. Tap “Stop”, untick double speed and run it again.' : 'Frames are being skipped, so short blinks can be missed. Close other apps and run it again, or record the clip at a higher frame rate.');
+      else clearWarn('skip');
+    }
+    vDet.step(t);
+    $('.vidprog', vidScope).textContent = `${Math.round(vEl.currentTime / vEl.duration * 100)}%, ${blinks.length} blinks`;
+    if (vEl.requestVideoFrameCallback) vEl.requestVideoFrameCallback(vLoop); else requestAnimationFrame(() => vLoop());
+  }
+  function stopVideo() { analysing = false; try { vEl.pause(); } catch (e) {} $('.vidgo', vidScope).textContent = 'Find blinks'; }
+  $('.vidgo', vidScope).addEventListener('click', async () => {
+    if (analysing) { stopVideo(); return; }
+    if (!vFile) return;
+    reset(); vDet.reset();
+    vEl.currentTime = 0;
+    await new Promise(r => { vEl.addEventListener('seeked', r, { once: true }); setTimeout(r, 1500); });
+    analysing = true; vDet.reset(); lastMediaT = null; gaps.length = 0; lastEventMedia = vEl.currentTime * 1000;
+    vEl.playbackRate = $('.vidfast', vidScope).checked ? 2 : 1;
+    $('.vidgo', vidScope).textContent = 'Stop';
+    resEl.className = 'msg result'; resEl.textContent = 'Watching the clip for blinks. Keep this screen open.';
+    try { await vEl.play(); } catch (e) { stopVideo(); resEl.className = 'msg result bad'; resEl.textContent = 'Couldn’t play the video.'; return; }
+    vLoop();
+  });
+  vEl.addEventListener('ended', () => {
+    if (!analysing) return;
+    analysing = false; $('.vidgo', vidScope).textContent = 'Find blinks';
+    if (blinks.length < opts.need() && !finished) {
+      resEl.className = 'msg result bad';
+      resEl.textContent = `Only found ${blinks.length} blinks; it needs ${opts.need()}. Use a longer clip, or if it missed blinks, lower the sensitivity and run it again.`;
+    }
+  });
+
+  function setMode(m) {
+    mode = m;
+    $('.tapmode', el).classList.toggle('hidden', m !== 'tap');
+    $('.cammode', el).classList.toggle('hidden', m !== 'cam');
+    $('.vidmode', el).classList.toggle('hidden', m !== 'vid');
+    if (m !== 'cam') stopCam();
+    if (m !== 'vid') stopVideo();
+  }
+  render();
+  setInterval(() => {
+    if (finished) return;
+    // nothing detected for a long time (blinks average about 8 s apart; a full minute without one is very unlikely)
+    if (mode === 'tap' && blinks.length && lastEventWall && now() - lastEventWall > WD.quiet) warn('quiet', `No blinks tapped for ${Math.round((now() - lastEventWall) / 1000)} seconds. That’s very unlikely in the game, so you may have missed some. If you did, tap “Start over”.`);
+    else if (mode === 'cam' && armed && running && lastEventWall && now() - lastEventWall > WD.quiet) warn('quiet', `No blinks detected for ${Math.round((now() - lastEventWall) / 1000)} seconds. Check the box is on your trainer’s eyes and the bar jumps past the red line on a blink. If not, drag the sensitivity slider left.`);
+    else if (mode === 'vid' && analysing && vEl.currentTime * 1000 - lastEventMedia > WD.quiet) warn('quiet', `No blinks found in the last ${Math.round((vEl.currentTime * 1000 - lastEventMedia) / 1000)} seconds of the clip. Check the box is on the eyes; if it is, stop, drag the sensitivity slider left and run it again.`);
+    // live camera health
+    if (mode === 'cam' && running) {
+      const last = frameTimes[frameTimes.length - 1];
+      if (!last || now() - last > 1500) warn('frozen', 'The camera feed has frozen. Tap “Stop”, then “Start camera” again. If it keeps happening, let the phone cool down or close other apps.');
+      else {
+        clearWarn('frozen');
+        const fps = frameTimes.length / 2;
+        if (fps < WD.minFps) warn('slow', `The camera is only managing about ${Math.round(fps)} frames a second, which can miss short blinks. Close other apps, let the phone cool down, or switch to tap mode.`);
+        else if (fps >= WD.minFps + 3) clearWarn('slow');
+      }
+    }
+  }, 1000);
+  return { get warning() { return topWarn(); }, setMode, reset, stopCam, render, tapEvent, get count() { return blinks.length; }, get camOn() { return running; }, get mode() { return mode; } };
+}
+
+// ---------- routing ----------
+const route = () => (location.hash || '#seed').slice(1);
+function show() {
+  let r = route(); if (!['seed', 'target', 'lineup', 'hit'].includes(r)) r = 'seed';
+  $$('section.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + r));
+  $$('nav.steps a').forEach(a => { if (a.dataset.step === r) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  if (r !== 'seed') recId.stopCam();
+  if (r !== 'lineup' && r !== 'hit') recReid.stopCam();
+  keepAwake(wantAwake());
+  refresh();
+}
+window.addEventListener('hashchange', show);
+
+function refresh() {
+  $$('nav.steps a').forEach(a => {
+    const st = a.dataset.step;
+    const done = st === 'seed' ? !!S.seed : st === 'target' ? !!S.target : st === 'lineup' ? !!(S.anchor && S.anchor.reid) : false;
+    a.classList.toggle('done', done);
+  });
+  $('#targetNoSeed').classList.toggle('hidden', !!S.seed);
+  $('#lineupNoSeed').classList.toggle('hidden', !!S.seed);
+  const hasHit = !!(S.target && S.anchor);
+  $('#hitNoTarget').classList.toggle('hidden', hasHit);
+  $('#hitBody').classList.toggle('hidden', !hasHit);
+  if (hasHit) renderHitStatic();
+}
+
+// ---------- step 1: seed ----------
+function setMethod(section, rec) {
+  $$('.seg button', section).forEach(b => b.addEventListener('click', () => {
+    $$('.seg button', section).forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    rec.setMode(b.dataset.method);
+  }));
+}
+const recId = makeRecorder($('[data-recorder="id"]'), {
+  need: () => 40,
+  onDone(bits, ivs, lastT, detail, msg, info = {}) {
+    const res = Core.recover(bits, ivs);
+    if (!res) {
+      const bad = detail.filter(d => d.off).length;
+      msg.className = 'msg result bad';
+      msg.textContent = 'Couldn’t find a seed from those blinks. Most likely one was missed, doubled up, or a double blink was recorded as single.' + (bad ? ` ${bad} gap${bad > 1 ? 's' : ''} marked “?” looked off.` : '') + ' Tap “Start over” and try again.';
+      return;
+    }
+    S.seed = res.state;
+    S.anchor = { state: res.state, adv: 0, t0: lastT, pkNext: null, reid: false, approx: !!info.approx };
+    save();
+    msg.className = 'msg result good';
+    msg.innerHTML = `Seed found and checked against all 40 blinks.` + (info.approx ? ' The advance count is a rough estimate from when the video was saved, which is fine for picking a target. Lining up at the Pokémon makes it exact.' : ' Tracking from advance 0.') + `<br><span class="small">${res.state.map(hex).join(' ')}</span><br>Next: <a href="#target">pick your target</a>.`;
+    refresh();
+  }
+});
+setMethod($('#v-seed'), recId);
+
+$('#manualSeedBtn').addEventListener('click', () => {
+  const m = $('#manualMsg');
+  const toks = $('#manualSeed').value.trim().split(/[\s,]+/).filter(Boolean);
+  try {
+    let st;
+    if (toks.length === 4) st = toks.map(x => Number(BigInt(x.startsWith('0x') ? x : '0x' + x) & 0xffffffffn));
+    else if (toks.length === 2) {
+      const [a, b] = toks.map(x => BigInt(x.startsWith('0x') ? x : '0x' + x));
+      st = [Number(a >> 32n & 0xffffffffn), Number(a & 0xffffffffn), Number(b >> 32n & 0xffffffffn), Number(b & 0xffffffffn)];
+    } else throw 0;
+    if (st.every(v => v === 0)) throw 0;
+    S.seed = st; S.anchor = null; save();
+    m.className = 'msg good'; m.innerHTML = 'Seed saved. Line up (step 3) to start tracking, then <a href="#target">pick your target</a>.';
+    refresh();
+  } catch (e) { m.className = 'msg bad'; m.textContent = 'That doesn’t look like a seed. Enter four hex values or two 64-bit hex values.'; }
+});
+
+// ---------- step 2: target ----------
+function fillEncounters() {
+  const game = $('#game').value; const sel = $('#enc'); const prev = sel.value || setting('enc', '');
+  sel.innerHTML = '';
+  ENC.forEach(([grp, list]) => {
+    const og = document.createElement('optgroup'); og.label = grp;
+    list.forEach(([name]) => { const t = TPL[grp + '|' + name]; if (t.version !== 'both' && t.version !== game) return; const o = document.createElement('option'); o.value = grp + '|' + name; o.textContent = name; og.appendChild(o); });
+    if (og.children.length) sel.appendChild(og);
+  });
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+$('#game').value = setting('game', 'BD');
+$('#game').addEventListener('change', () => { setSetting('game', $('#game').value); fillEncounters(); });
+fillEncounters();
+$('#enc').addEventListener('change', () => setSetting('enc', $('#enc').value));
+['#syncNature', '#fNature'].forEach((id, k) => { const s = $(id); if (k) s.innerHTML = '<option value="any">Any</option>'; N.forEach((n, i) => { const o = document.createElement('option'); o.value = i; o.textContent = n; s.appendChild(o); }); });
+$('#fRank').value = setting('fRank2', 'auto');
+function chosenSetIndex(tpl) { const opts = SETS[tpl.name]; if (!opts) return -1; const i = +setting('set:' + tpl.name, 0); return i >= 0 && i < opts.length ? i : 0; }
+function chosenBuild(tpl) { const i = chosenSetIndex(tpl); return i < 0 ? tpl.build : SETS[tpl.name][i][0]; }
+function rankHint() {
+  const tpl = TPL[$('#enc').value]; const v = $('#fRank').value;
+  const sets = tpl && SETS[tpl.name];
+  const showSets = !!sets && v === 'auto';
+  $('#setWrap').classList.toggle('hidden', !showSets);
+  if (showSets) {
+    const shortName = tpl.name.replace(/ \(.*\)$/, '');
+    $('#fSetLabel').textContent = tpl.name === 'Eevee' ? 'What will you evolve it into?' : `How will you use ${shortName}?`;
+    $('#fSet').innerHTML = sets.map(([b, lab], i) => `<option value="${i}">${lab}${i === 0 ? ' (default)' : ''}</option>`).join('');
+    $('#fSet').value = String(chosenSetIndex(tpl));
+  }
+  if (!tpl || v === 'off') { $('#rankHint').textContent = 'Results are listed soonest first.'; return; }
+  const key = v === 'auto' ? chosenBuild(tpl) : v; const b = BUILDS[key];
+  $('#rankHint').textContent = (v === 'auto' ? `Ranking for ${tpl.name.replace(/ \(.*\)$/, '')} as a ${b.label.toLowerCase()}: ${b.what}. ` : `Ranking ${b.what}. `) + `Best natures: ${b.natures}. The top result gets a “best” tag; the percentage shows how close each is to ideal. Leave the minimums at 0 so shinies aren’t filtered out.`;
+}
+$('#fRank').addEventListener('change', () => { setSetting('fRank2', $('#fRank').value); rankHint(); });
+$('#fSet').addEventListener('change', () => { const tpl = TPL[$('#enc').value]; if (tpl) setSetting('set:' + tpl.name, +$('#fSet').value); rankHint(); });
+$('#enc').addEventListener('change', rankHint);
+$('#game').addEventListener('change', rankHint);
+rankHint();
+$('#lead').addEventListener('change', () => $('#syncWrap').classList.toggle('hidden', $('#lead').value !== 'sync'));
+const STATS = ['HP', 'Atk', 'Def', 'SpA', 'SpD', 'Spe'];
+$('#ivMins').innerHTML = STATS.map((s, i) => `<div><label for="iv${i}">${s}</label><input type="number" id="iv${i}" min="0" max="31" value="0" inputmode="numeric"></div>`).join('');
+
+function currentLead() { const t = $('#lead').value; return t === 'sync' ? { type: 'sync', nature: +$('#syncNature').value } : { type: t }; }
+function passes(r, f) {
+  if (f.shiny === 'shiny' && !r.shiny) return false;
+  if (f.shiny === 'square' && r.shiny !== 2) return false;
+  if (f.nature !== 'any' && r.nature !== +f.nature) return false;
+  if (f.gender !== 'any' && r.gender !== +f.gender) return false;
+  for (let i = 0; i < 6; i++) if (r.ivs[i] < f.mins[i]) return false;
+  if (f.zeroAtk && r.ivs[1] !== 0) return false;
+  return true;
+}
+let searching = false;
+$('#searchBtn').addEventListener('click', () => {
+  if (!S.seed || searching) return;
+  const tplKey = $('#enc').value, tpl = TPL[tplKey], lead = currentLead();
+  const f = { shiny: $('#fShiny').value, nature: $('#fNature').value, gender: $('#fGender').value, mins: STATS.map((_, i) => Math.max(0, Math.min(31, +$('#iv' + i).value || 0))), zeroAtk: $('#fZeroAtk').checked, rank: $('#fRank').value };
+  f.best = f.rank !== 'off';
+  // IV ranking weights, order HP Atk Def SpA SpD Spe. A negative weight means lower is better.
+  const buildKey = f.rank === 'auto' ? chosenBuild(tpl) : f.rank;
+  const W = (BUILDS[buildKey] || BUILDS.overall).weights;
+  const maxScore = W.reduce((s, w) => s + Math.abs(w) * 31, 0);
+  const score = r => r.ivs.reduce((s, v, i) => s + (W[i] >= 0 ? W[i] * v : -W[i] * (31 - v)), 0);
+  const pct = r => Math.round(score(r) / maxScore * 100);
+  const range = Math.max(100, Math.min(1000000, +$('#fRange').value || 10000));
+  const cur = currentAdvance(); const start = cur == null ? 0 : cur + 1;
+  const gen = Core.generateRange(S.seed, start, range, tpl, lead);
+  const hits = []; let scanned = 0, trimmed = false; searching = true;
+  $('#searchBtn').disabled = true; $('#resWrap').classList.add('hidden'); $('#targetMsg').textContent = '';
+  const tl = timeline(); const off = +setting('offset', 0);
+  (function chunk() {
+    const stop = scanned + 25000;
+    for (let it = gen.next(); !it.done; it = gen.next()) {
+      scanned++;
+      if (passes(it.value, f)) {
+        hits.push(it.value);
+        if (f.best) { if (hits.length > 1200) { hits.sort((x, y) => score(y) - score(x) || x.advance - y.advance); hits.length = 300; trimmed = true; } }
+        else if (hits.length >= 300) break;
+      }
+      if (scanned >= stop) { $('#searchInfo').textContent = `Searching… ${fmt(scanned)} / ${fmt(range)}`; return setTimeout(chunk, 0); }
+    }
+    searching = false; $('#searchBtn').disabled = false;
+    $('#searchInfo').textContent = `${trimmed || hits.length >= 300 ? '300+' : hits.length} match${hits.length === 1 ? '' : 'es'} from advance ${fmt(start)} to ${fmt(start + range)}` + (f.best && hits.length ? ', best IVs first' : '');
+    if (f.best) { hits.sort((x, y) => score(y) - score(x) || x.advance - y.advance); if (hits.length > 300) hits.length = 300; }
+    const body = $('#resBody'); body.innerHTML = '';
+    if (!hits.length) { $('#targetMsg').className = 'msg'; $('#targetMsg').textContent = 'Nothing matched. Look further ahead or loosen the filters.'; return; }
+    hits.forEach((r, idx) => {
+      const tr = document.createElement('tr');
+      if (r.shiny) tr.className = 'shinyrow';
+      if (S.target && S.target.adv === r.advance && S.target.tplKey === tplKey) tr.classList.add('sel');
+      const wait = tl ? dur(tl.timeOf(r.advance - off) - now()) : '—';
+      const isBest = f.best && idx === 0;
+      tr.innerHTML = `<td class="num">${fmt(r.advance)}${isBest ? ' <span class="tag">best</span>' : ''}</td><td>${wait}</td><td class="sh">${shinyTxt(r.shiny)}</td><td>${ivTxt(r.ivs)}${f.best ? ` <span class="small">(${pct(r)}%)</span>` : ''}</td><td>${N[r.nature]}</td><td>${abilityTxt(r.ability, tpl)}</td><td>${genderTxt(r.gender)}</td>`;
+      tr.addEventListener('click', () => {
+        $$('#resBody tr').forEach(x => x.classList.remove('sel')); tr.classList.add('sel');
+        S.target = { adv: r.advance, tplKey, lead, shiny: r.shiny, ivs: r.ivs, nature: r.nature }; save();
+        $('#targetMsg').className = 'msg good';
+        $('#targetMsg').innerHTML = `Target locked: ${tpl.name} at advance ${fmt(r.advance)}. Now head to the Pokémon and <a href="#lineup">line up</a>.`;
+        refresh();
+      });
+      body.appendChild(tr);
+    });
+    $('#resWrap').classList.remove('hidden');
+  })();
+});
+
+// ---------- step 3: line up ----------
+$('#pkBlink').checked = !!setting('pkBlink', false);
+$('#pkBlink').addEventListener('change', () => setSetting('pkBlink', $('#pkBlink').checked));
+$('#reidCount').addEventListener('change', () => recReid.render());
+// Watching state (memory only): absolute RNG call index of each recorded blink once synced
+let W = null; // { noisy, winStart, abs: [], synced, lastSync, blinksUsed }
+const advFromSeed = k => new Core.Xorshift(...S.seed).advance(Math.max(0, k)).state();
+const solveBlinks = (noisy, base, ivs, max) => noisy ? Core.reidentifyNoisy(base, ivs, max) : Core.reidentify(base, ivs, max);
+const recReid = makeRecorder($('[data-recorder="reid"]'), {
+  need: () => Math.max(6, Math.min(20, +$('#reidCount').value || 10)),
+  keepGoing: () => true,
+  onReset: () => { W = null; },
+  onDone(bits, ivs, lastT, detail, msg) {
+    if (!S.seed) { msg.className = 'msg result bad'; msg.textContent = 'Find your seed first (step 1).'; return; }
+    const noisy = $('#pkBlink').checked;
+    const need = Math.max(6, Math.min(20, +$('#reidCount').value || 10));
+    const n = ivs.length;
+    if (!W || W.noisy !== noisy) W = { noisy, winStart: Math.max(0, n - need), abs: [], synced: false };
+    const setAnchor = (res, baseAdv, from) => {
+      res.blinkIdx.forEach((x, i) => { W.abs[from + i] = baseAdv + x; });
+      S.anchor = { state: res.state, adv: baseAdv + res.advances, t0: lastT, pkNext: noisy ? res.nextPkBlink : null, reid: true };
+      W.synced = true; W.lastSync = lastT; W.blinksUsed = n - from; save(); refresh();
+    };
+    // already synced: quick re-sync on the newest window of up to 40 blinks
+    if (W.synced) {
+      const k = Math.max(W.winStart, n - 40);
+      const b0 = W.abs[k] - 20;
+      const res = solveBlinks(noisy, advFromSeed(b0), ivs.slice(k, n), 60);
+      if (res) {
+        setAnchor(res, b0, k);
+        msg.className = 'msg result good';
+        msg.innerHTML = `Synced at advance ${fmt(S.anchor.adv)} from the last ${n - k} blinks. Keep ${recReid.mode === 'cam' ? 'the camera running' : 'tapping'} right up until you press A.` + (S.target ? ` <a href="#hit">Countdown</a>` : '');
+        return;
+      }
+      W = { noisy, winStart: n - 1, abs: [], synced: false, lost: true };
+      msg.className = 'msg result bad';
+      msg.textContent = `Lost sync: that blink didn’t fit. Usually a missed or extra tap. Keep going and it will re-sync by itself after ${need} clean blinks, or tap “Start over”.`;
+      return;
+    }
+    if (n - W.winStart < need) {
+      msg.className = 'msg result';
+      msg.textContent = W.lost ? `Re-syncing: ${n - W.winStart} of ${need} blinks…` : '';
+      return;
+    }
+    // first match (or recovery): wider search
+    const est = currentAdvance();
+    let baseAdv = 0, max;
+    if (W.lost && est != null) { baseAdv = Math.max(0, est - 5000); max = 10000; }
+    else { max = +$('#reidMax').value || Math.round(Math.max(50000, (est || 0) * 1.3 + 30000, S.target ? S.target.adv + 20000 : 0)); max = Math.min(max, noisy ? 400000 : 2000000); }
+    msg.className = 'msg result'; msg.textContent = `Searching up to advance ${fmt(baseAdv + max)}…`;
+    const winIvs = ivs.slice(W.winStart, n), from = W.winStart;
+    setTimeout(() => {
+      const res = solveBlinks(noisy, baseAdv ? advFromSeed(baseAdv) : S.seed, winIvs, max);
+      if (!res) {
+        if (W.lost) { W.winStart = n - 1; msg.className = 'msg result bad'; msg.textContent = 'Still can’t re-sync. Keep going, or tap “Start over”.'; return; }
+        msg.className = 'msg result bad';
+        msg.textContent = `No match up to advance ${fmt(max)}. Check the “Pokémon is blinking” box is right for where you’re standing, then tap “Start over”. If you’ve been waiting a long time, raise “Search up to advance”.`;
+        return;
+      }
+      const prevTl = timeline(); const predicted = prevTl ? prevTl.advanceAt(lastT) : null;
+      setAnchor(res, baseAdv, from); W.lost = false;
+      flipMeasure(predicted, S.anchor.adv);
+      msg.className = res.unique ? 'msg result good' : 'msg result bad';
+      msg.innerHTML = `Found you at advance ${fmt(S.anchor.adv)}.` + (res.unique ? '' : (res.alternatives && res.alternatives.length ? ` It could also be advance ${res.alternatives.slice(0, 2).map(x => fmt(baseAdv + x)).join(' or ')}, so tap “Start over” and record again to be sure.` : ' Those blinks also matched somewhere else, so tap “Start over” and record a few more to be sure.'))
+        + ` Keep ${recReid.mode === 'cam' ? 'the camera running' : 'tapping'}: every blink from here re-syncs the countdown.` + (S.target ? ` <a href="#hit">Go to the countdown</a>` : ` Next: <a href="#target">pick a target</a>.`);
+    }, 30);
+  }
+});
+$('#pkBlink').addEventListener('change', () => { W = null; });
+setMethod($('#v-lineup'), recReid);
+
+// ---------- Pokédex flipping helper ----------
+const AIM_SHORT = 600; // stop flipping roughly this many advances short of the press (about 10 minutes)
+let flipStart = null;
+S.flip = S.flip || { ms: 0, rate: null };
+function flipMeasure(predicted, actual) {
+  if (S.flip.ms > 3000 && predicted != null) {
+    const gained = actual - predicted;
+    if (gained > 0) {
+      const r = gained / (S.flip.ms / 1000);
+      S.flip.rate = S.flip.rate ? S.flip.rate * 0.4 + r * 0.6 : r;
+      S.flip.lastGain = gained;
+    }
+  }
+  S.flip.ms = 0; save(); flipInfo();
+}
+function flipInfo() {
+  const box = $('#flipInfo'); if (!box) return;
+  const cur = currentAdvance();
+  if (!S.target || cur == null || !(S.anchor && S.anchor.reid)) { box.textContent = 'Pick a target (step 2) and line up first. Then this tells you how far you have to go.'; return; }
+  const press = S.target.adv - (+setting('offset', 0));
+  const left = press - cur;
+  let t = `${fmt(left)} advances to go, about ${dur(left * Core.TICK * 1000)} if you just wait.`;
+  if (left <= AIM_SHORT * 1.5) t += ' That’s close enough. Don’t flip; just keep watching blinks.';
+  else {
+    const need = left - AIM_SHORT;
+    if (S.flip.lastGain) t += ` Your last flipping burst gained ${fmt(S.flip.lastGain)} advances.`;
+    if (S.flip.rate) {
+      const secs = Math.max(3, Math.round(need / S.flip.rate * 0.8)); // aim a bit short of the stopping point
+      t += ` You flip at about ${fmt(S.flip.rate)} advances a second. Flip for about ${secs} seconds next, then line up again.`;
+    } else t += ' Flip for about 20 seconds first so the app can measure your speed, then line up again.';
+  }
+  box.textContent = t;
+}
+$('#flipBtn').addEventListener('click', () => {
+  if (flipStart == null) {
+    flipStart = now(); recReid.reset();
+    if (S.anchor) { S.anchor.reid = false; save(); }
+    $('#flipBtn').textContent = 'Stop: I’ve closed the Pokédex';
+  } else {
+    S.flip.ms = (S.flip.ms || 0) + (now() - flipStart); flipStart = null; save();
+    $('#flipBtn').textContent = 'Start flipping';
+    $('#flipInfo').textContent = 'Now record blinks again above to see where you landed.';
+    recReid.reset(); window.scrollTo({ top: $('[data-recorder="reid"]').getBoundingClientRect().top + scrollY - 80, behavior: 'smooth' });
+  }
+});
+setInterval(() => { if (route() === 'lineup') { if (flipStart != null) $('#flipInfo').textContent = `Flipping… ${Math.round((now() - flipStart) / 1000)} s`; else flipInfo(); } }, 1000);
+
+// ---------- step 4: hit ----------
+['offset', 'pressLag', 'camLag'].forEach(k => {
+  const inp = $('#' + k); inp.value = setting(k, inp.value);
+  inp.addEventListener('change', () => { setSetting(k, +inp.value || 0); renderHitStatic(); });
+});
+$('#theme').value = setting('theme', '');
+const applyTheme = () => { const v = $('#theme').value; if (v) document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme; };
+$('#theme').addEventListener('change', () => { setSetting('theme', $('#theme').value); applyTheme(); });
+applyTheme();
+$('#beeps').checked = setting('beeps', true);
+$('#beeps').addEventListener('change', () => setSetting('beeps', $('#beeps').checked));
+
+function renderHitStatic() {
+  if (!S.target) return;
+  const tpl = TPL[S.target.tplKey]; const t = S.target;
+  $('#hitTarget').textContent = `${tpl.name} at advance ${fmt(t.adv)}`;
+  $('#hitTargetSub').textContent = [shinyTxt(t.shiny) || 'not shiny', ivTxt(t.ivs), N[t.nature]].join(', ');
+  const body = $('#nearBody'); body.innerHTML = '';
+  const start = Math.max(0, t.adv - 15);
+  for (const r of Core.generateRange(S.seed, start, 30, tpl, t.lead)) {
+    const tr = document.createElement('tr');
+    if (r.advance === t.adv) tr.classList.add('sel');
+    if (r.shiny) tr.classList.add('shinyrow');
+    tr.innerHTML = `<td class="num">${fmt(r.advance)}${r.advance === t.adv ? ' (target)' : ''}</td><td class="sh">${shinyTxt(r.shiny)}</td><td>${ivTxt(r.ivs)}</td><td>${N[r.nature]}</td><td>${abilityTxt(r.ability, tpl)}</td><td>${genderTxt(r.gender)}</td>`;
+    tr.addEventListener('click', () => {
+      const old = +setting('offset', 0); const nu = old + (r.advance - t.adv);
+      setSetting('offset', nu); $('#offset').value = nu;
+      $('#offsetMsg').className = 'msg good';
+      $('#offsetMsg').textContent = r.advance === t.adv ? 'Bang on target. Offset stays the same.' : `You landed ${Math.abs(r.advance - t.adv)} ${r.advance > t.adv ? 'late' : 'early'}. Offset changed from ${old} to ${nu}. Reset the game and start again from step 1; the new offset will be used.`;
+    });
+    body.appendChild(tr);
+  }
+  requestAnimationFrame(() => { const sel = $('#nearBody tr.sel'), wrap = $('#nearWrap'); if (sel && wrap.clientHeight) wrap.scrollTop = sel.offsetTop - wrap.clientHeight / 2; });
+}
+
+let lastBeep = null;
+function tick() {
+  requestAnimationFrame(tick);
+  const tl = timeline(); const t = now();
+  const cur = tl ? tl.advanceAt(t) : null;
+  $('#hdrAdv').textContent = cur == null ? '—' : fmt(cur);
+  $('#hdrLbl').textContent = cur == null ? (S.seed ? 'line up to track' : 'no seed yet') : (S.anchor.reid ? 'current advance' : 'advance, if you stay put');
+  if (route() !== 'hit' || !S.target || !tl) return;
+  const press = S.target.adv - (+setting('offset', 0));
+  const lag = +setting('pressLag', 150);
+  const a = tl.timeOf(press), b = tl.timeOf(press + 1);
+  const pressAt = (a + b) / 2 - lag;
+  const left = pressAt - t;
+  const since = W && W.synced ? (t - W.lastSync) / 1000 : null;
+  const camOn = recReid.camOn;
+  $('#syncStat').textContent = since != null ? `Last synced ${Math.round(since)} s ago from ${W.blinksUsed} blinks${camOn ? ', camera watching' : ''}.` : (S.anchor && S.anchor.reid ? 'Not watching right now. Tracking from your last line-up.' : 'Not lined up yet.');
+  const rw = recReid.warning; $('#hitWarn').textContent = rw; $('#hitWarn').classList.toggle('hidden', !rw);
+  const risky = S.anchor && S.anchor.pkNext != null && (since == null || since > 45);
+  $('#syncWarn').classList.toggle('hidden', !risky);
+  $('#sCur').textContent = fmt(cur); $('#sPress').textContent = fmt(press); $('#sLeft').textContent = fmt(Math.max(0, press - cur));
+  const cd = $('#cd'), sub = $('#cdSub');
+  if (cur > press) { cd.textContent = '0.0'; sub.textContent = 'Window passed. Find what you got in the table below.'; }
+  else if (left < 0) { cd.textContent = 'NOW'; sub.textContent = 'Press A'; }
+  else if (left < 60000) { cd.textContent = (left / 1000).toFixed(1); sub.textContent = 'seconds until you press A'; }
+  else {
+    const s = Math.floor(left / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, ss = s % 60;
+    cd.textContent = (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(ss).padStart(2, '0');
+    sub.textContent = !S.anchor.reid ? 'until you press A (line up at the Pokémon first)' : 'until you press A';
+  }
+  // window bar: 6 s span centred on press time
+  const span = 6000, lo = pressAt - span / 2;
+  const pct = x => Math.max(0, Math.min(100, (x - lo) / span * 100));
+  $('#winZone').style.left = pct(a - lag) + '%'; $('#winZone').style.width = (pct(b - lag) - pct(a - lag)) + '%';
+  $('#winNow').style.left = pct(t) + '%';
+  if ($('#beeps').checked && left >= -200 && left < 5200) {
+    const sec = Math.ceil(left / 1000);
+    if (sec !== lastBeep) { lastBeep = sec; if (sec <= 0) beep(1320, 0.25); else if (sec <= 5) beep(660, 0.08); }
+  }
+}
+
+$('#hitTap').addEventListener('pointerdown', (e) => recReid.tapEvent(e, $('#hitTap')));
+$('#resetAll').addEventListener('click', () => {
+  if (!confirm('Clear your seed, target and settings?')) return;
+  S = { seed: null, anchor: null, target: null, settings: {} }; save(); location.hash = '#seed'; location.reload();
+});
+
+show();
+requestAnimationFrame(tick);
+})();
+
+</script>
+<script>
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); });
+}
+</script>
+</body>
+</html>

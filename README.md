@@ -1,4 +1,4 @@
-# Blink Reader
+# Blink RNG
 
 A phone app for RNG manipulation of stationary encounters in Pokémon Brilliant Diamond and Shining Pearl, using the blink method. Record your trainer's blinks, find your RNG seed, pick a target (shiny, IVs, nature), and get a countdown telling you exactly when to press A.
 

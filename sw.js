@@ -1,5 +1,5 @@
-// Blink Reader offline cache. Bump VERSION when you update index.html.
-const VERSION = 'blink-reader-v17';
+// Blink RNG offline cache. Bump VERSION when you update index.html.
+const VERSION = 'blink-rng-v19';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', (e) => {

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Blink Reader – BDSP stationary RNG</title>
+<title>Blink RNG – stationary RNG for BDSP</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="icon-192.png">
@@ -131,7 +131,7 @@ footer{margin-top:30px;font-size:.8rem;color:var(--ink-soft);border-top:1px soli
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="brand">Blink Reader<small>BDSP stationary RNG, phone edition</small></div>
+    <div class="brand">Blink RNG<small>Stationary RNG for BDSP, phone edition</small></div>
     <div class="readout"><div class="n" id="hdrAdv">—</div><div class="l" id="hdrLbl">no seed yet</div></div>
   </header>
 
@@ -317,7 +317,7 @@ footer{margin-top:30px;font-size:.8rem;color:var(--ink-soft);border-top:1px soli
     </div>
     <div class="cammode hidden">
       <div class="row"><button type="button" class="btn camstart">Start camera</button><button type="button" class="btn ghost camstop hidden">Stop</button></div>
-      <p class="small">Prop the phone up so your trainer’s face fills a good part of the picture. Tap on the eyes to place the box. Keep glare off the screen.</p>
+      <p class="small">Prop the phone up so your trainer’s face fills a good part of the picture. Tap on the eyes while they’re open to place the box. It learns what the open eyes look like and follows them as your trainer moves; the dotted area is where it searches. Keep glare off the screen.</p>
       <div class="cam hidden"><video playsinline muted></video><canvas class="ov"></canvas></div>
       <div class="camctl hidden">
         <label class="f">Box size</label><input type="range" class="boxsize" min="4" max="40" value="12">
@@ -333,7 +333,7 @@ footer{margin-top:30px;font-size:.8rem;color:var(--ink-soft);border-top:1px soli
       <div class="cam hidden"><video playsinline muted preload="auto"></video><canvas class="ov"></canvas></div>
       <div class="vidctl hidden">
         <label class="f">Find a frame</label><input type="range" class="vidpos" min="0" max="1000" value="5">
-        <p class="small">Scrub to where the eyes are open, then tap on them to place the box.</p>
+        <p class="small">Scrub to where the eyes are open, then tap on them to place the box. It learns what open eyes look like from that frame and follows them as the trainer moves.</p>
         <label class="f">Box size</label><input type="range" class="boxsize" min="4" max="40" value="12">
         <label class="f">Sensitivity (lower is more sensitive)</label><input type="range" class="thr" min="2" max="60" value="14">
         <div class="meter"><div class="bar"></div><div class="th"></div></div>
@@ -852,55 +852,102 @@ function makeRecorder(host, opts) {
   // ---- shared blink detector: watches a box on a video element ----
   // closed eye = the box looks different from the learned open-eye picture (like Project_Xs template matching)
   function makeDetector(scope, videoEl, roiKey) {
+    // Finds the open eyes each frame by searching a wider area around them (normalised cross-correlation),
+    // so an idle bob or sway doesn't look like a blink. A blink is when the eyes can't be found.
     const ov = $('canvas.ov', scope), sizeIn = $('.boxsize', scope), thrIn = $('.thr', scope);
     const meterBar = $('.meter .bar', scope), meterTh = $('.meter .th', scope);
-    sizeIn.value = setting('camBox', 12); thrIn.value = setting('camThr', 14);
+    sizeIn.value = setting('camBox', 12); thrIn.value = setting('camThr2', 25);
     let roi = setting(roiKey, { x: 0.5, y: 0.45 });
-    const work = document.createElement('canvas'); work.width = 24; work.height = 24;
+    const T = 20, M = 10, SW = T + 2 * M;          // template cells, search margin each side, search window
+    const work = document.createElement('canvas'); work.width = SW; work.height = SW;
     const wctx = work.getContext('2d', { willReadFrequently: true });
-    let tmpl = null, state = 0, stateStart = 0; // 0 open, 1 single, 2 double
-    let changedSince = null; // when the box first looked different, for spotting a moved phone or picture
+    let tmpl = null, tc = null, tn = 0;             // template, zero-mean template, its norm
+    let track = null;                               // tracked eye centre as a fraction of the frame
+    let state = 0, stateStart = 0, changedSince = null;
+    const buf = new Float32Array(SW * SW), I1 = new Float64Array((SW + 1) * (SW + 1)), I2 = new Float64Array((SW + 1) * (SW + 1));
+    function grab(cxF, cyF) {
+      const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+      const bw = vw * sizeIn.value / 100, cell = bw / T;
+      wctx.drawImage(videoEl, cxF * vw - (SW * cell) / 2, cyF * vh - (SW * cell) / 2, SW * cell, SW * cell, 0, 0, SW, SW);
+      const px = wctx.getImageData(0, 0, SW, SW).data;
+      for (let k = 0; k < SW * SW; k++) buf[k] = px[k * 4] * 0.3 + px[k * 4 + 1] * 0.59 + px[k * 4 + 2] * 0.11;
+      return cell;
+    }
+    function learn() {
+      tmpl = new Float32Array(T * T);
+      for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) tmpl[y * T + x] = buf[(y + M) * SW + x + M];
+      prepTemplate();
+    }
+    function prepTemplate() {
+      let m = 0; for (let k = 0; k < T * T; k++) m += tmpl[k]; m /= T * T;
+      tc = new Float32Array(T * T); let s = 0;
+      for (let k = 0; k < T * T; k++) { tc[k] = tmpl[k] - m; s += tc[k] * tc[k]; }
+      tn = Math.sqrt(s);
+    }
+    function match() { // best NCC over all offsets in the search window
+      for (let y = 0; y < SW; y++) { let r1 = 0, r2 = 0; for (let x = 0; x < SW; x++) { const v = buf[y * SW + x]; r1 += v; r2 += v * v; I1[(y + 1) * (SW + 1) + x + 1] = I1[y * (SW + 1) + x + 1] + r1; I2[(y + 1) * (SW + 1) + x + 1] = I2[y * (SW + 1) + x + 1] + r2; } }
+      const N = T * T; let best = -2, bx = M, by = M;
+      for (let oy = 0; oy <= SW - T; oy++) for (let ox = 0; ox <= SW - T; ox++) {
+        const A = (oy) * (SW + 1) + ox, B = A + T, C = (oy + T) * (SW + 1) + ox, D = C + T;
+        const s1 = I1[D] - I1[B] - I1[C] + I1[A], s2 = I2[D] - I2[B] - I2[C] + I2[A];
+        const varW = s2 - s1 * s1 / N; if (varW <= 1e-6) continue;
+        let dot = 0;
+        for (let y = 0; y < T; y++) { const row = (oy + y) * SW + ox, tr = y * T; for (let x = 0; x < T; x++) dot += tc[tr + x] * buf[row + x]; }
+        const ncc = dot / (tn * Math.sqrt(varW));
+        if (ncc > best) { best = ncc; bx = ox; by = oy; }
+      }
+      return { ncc: best, bx, by };
+    }
     const d = {
       onBlink: null, onDouble: null, onMoved: null,
       draw() {
         const w = ov.clientWidth, h = ov.clientHeight; if (!w) return;
         ov.width = w * devicePixelRatio; ov.height = h * devicePixelRatio;
         const c = ov.getContext('2d'); c.scale(devicePixelRatio, devicePixelRatio);
-        const bw = w * sizeIn.value / 100;
-        c.strokeStyle = state ? '#ff9ec6' : '#7cc4ff'; c.lineWidth = 2;
-        c.strokeRect(roi.x * w - bw / 2, roi.y * h - bw / 2, bw, bw);
+        const bw = w * sizeIn.value / 100, p = track || roi;
+        c.strokeStyle = 'rgba(255,255,255,.35)'; c.setLineDash([4, 4]); c.lineWidth = 1;
+        c.strokeRect(p.x * w - bw, p.y * h - bw, bw * 2, bw * 2); // search area
+        c.setLineDash([]); c.strokeStyle = state ? '#ff9ec6' : '#7cc4ff'; c.lineWidth = 2;
+        c.strokeRect(p.x * w - bw / 2, p.y * h - bw / 2, bw, bw);
       },
-      reset() { tmpl = null; state = 0; changedSince = null; },
+      reset() { tmpl = null; track = null; state = 0; changedSince = null; },
+      retrack() { track = null; state = 0; changedSince = null; }, // keep the learned eyes, restart following
+      get learned() { return !!tmpl; },
       step(t) { // t = ms
         const vw = videoEl.videoWidth, vh = videoEl.videoHeight; if (!vw) return;
-        const bw = vw * sizeIn.value / 100;
-        wctx.drawImage(videoEl, roi.x * vw - bw / 2, roi.y * vh - bw / 2, bw, bw, 0, 0, 24, 24);
-        const px = wctx.getImageData(0, 0, 24, 24).data;
-        const g = new Float32Array(576);
-        for (let i = 0; i < 576; i++) g[i] = px[i * 4] * 0.3 + px[i * 4 + 1] * 0.59 + px[i * 4 + 2] * 0.11;
-        if (!tmpl) { tmpl = g; return; }
-        let diff = 0; for (let i = 0; i < 576; i++) diff += Math.abs(g[i] - tmpl[i]); diff /= 576;
-        const thr = +thrIn.value; const closed = diff > thr;
-        meterBar.style.width = Math.min(100, diff / 80 * 100) + '%';
+        if (!track) track = { x: roi.x, y: roi.y };
+        const cell = grab(track.x, track.y);
+        if (!tmpl) { learn(); if (tn < 40) { tmpl = null; } d.draw(); return; } // no detail in the box yet
+        const { ncc, bx, by } = match();
+        const thr = +thrIn.value; const cut = 1 - thr / 100; const closed = ncc < cut;
+        const shown = Math.max(0, Math.min(80, (1 - ncc) * 100));
+        meterBar.style.width = (shown / 80 * 100) + '%';
         meterTh.style.left = (thr / 80 * 100) + '%';
-        if (state === 0 && !closed) for (let i = 0; i < 576; i++) tmpl[i] = tmpl[i] * 0.9 + g[i] * 0.1;
+        if (!closed && state === 0 && ncc > cut + 0.08) {
+          // follow the eyes as they move
+          track.x += ((bx - M) * cell) / vw; track.y += ((by - M) * cell) / vh;
+          // very slowly refresh the template from a confident match (handles TV brightness drift)
+          if (ncc > 0.93) { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) tmpl[y * T + x] = tmpl[y * T + x] * 0.98 + buf[(by + y) * SW + bx + x] * 0.02; prepTemplate(); }
+          const bwF = sizeIn.value / 100;
+          if (Math.abs(track.x - roi.x) > bwF * 2.5 || Math.abs(track.y - roi.y) * vh / vw > bwF * 2.5) { d.reset(); d.onMoved && d.onMoved(); return; }
+        }
         if (closed) {
           if (state === 0) { state = 1; stateStart = t; d.onBlink && d.onBlink(t); d.draw(); }
           else if (state === 1 && t - stateStart > 300) { state = 2; d.onDouble && d.onDouble(); }
         }
         if (state !== 0 && t - stateStart > 700) { state = 0; d.draw(); }
-        // a blink lasts well under a second; staying different for 2.5 s means the view moved
-        if (closed) { if (changedSince == null) changedSince = t; else if (t - changedSince > (WD.moved)) { changedSince = null; tmpl = null; state = 0; d.onMoved && d.onMoved(); } }
+        if (closed) { if (changedSince == null) changedSince = t; else if (t - changedSince > WD.moved) { changedSince = null; d.reset(); d.onMoved && d.onMoved(); } }
         else changedSince = null;
+        if (!closed && (t | 0) % 4 === 0) d.draw();
       }
     };
     ov.addEventListener('pointerdown', (e) => {
       const r = ov.getBoundingClientRect();
       roi = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
-      setSetting(roiKey, roi); tmpl = null; d.draw();
+      setSetting(roiKey, roi); d.reset(); d.draw();
     });
-    sizeIn.addEventListener('input', () => { setSetting('camBox', +sizeIn.value); tmpl = null; d.draw(); });
-    thrIn.addEventListener('input', () => setSetting('camThr', +thrIn.value));
+    sizeIn.addEventListener('input', () => { setSetting('camBox', +sizeIn.value); d.reset(); d.draw(); });
+    thrIn.addEventListener('input', () => setSetting('camThr2', +thrIn.value));
     return d;
   }
 
@@ -973,6 +1020,8 @@ function makeRecorder(host, opts) {
   });
   vEl.addEventListener('error', () => { resEl.className = 'msg result bad'; resEl.textContent = 'This phone’s browser can’t play that video file. Try recording in the standard camera mode (not HDR or slow motion).'; });
   vEl.addEventListener('seeked', () => { if (!analysing) { vDet.reset(); vDet.step(0); vDet.draw(); } });
+  // tapping the eyes re-learns from the frame on screen
+  $('canvas.ov', vidScope).addEventListener('pointerdown', () => { if (!analysing) setTimeout(() => vDet.step(0), 0); });
   $('.vidpos', vidScope).addEventListener('input', (e) => { if (!analysing && vEl.duration) vEl.currentTime = vEl.duration * e.target.value / 1000; });
   function vLoop(_, meta) {
     if (!analysing) return;
@@ -992,10 +1041,10 @@ function makeRecorder(host, opts) {
   $('.vidgo', vidScope).addEventListener('click', async () => {
     if (analysing) { stopVideo(); return; }
     if (!vFile) return;
-    reset(); vDet.reset();
+    reset(); if (!vDet.learned) vDet.reset(); else vDet.retrack();
     vEl.currentTime = 0;
     await new Promise(r => { vEl.addEventListener('seeked', r, { once: true }); setTimeout(r, 1500); });
-    analysing = true; vDet.reset(); lastMediaT = null; gaps.length = 0; lastEventMedia = vEl.currentTime * 1000;
+    analysing = true; vDet.retrack(); lastMediaT = null; gaps.length = 0; lastEventMedia = vEl.currentTime * 1000;
     vEl.playbackRate = $('.vidfast', vidScope).checked ? 2 : 1;
     $('.vidgo', vidScope).textContent = 'Stop';
     resEl.className = 'msg result'; resEl.textContent = 'Watching the clip for blinks. Keep this screen open.';

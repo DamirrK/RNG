@@ -1,6 +1,6 @@
 {
-  "name": "Blink Reader – BDSP stationary RNG",
-  "short_name": "Blink Reader",
+  "name": "Blink RNG – stationary RNG for BDSP",
+  "short_name": "Blink RNG",
   "description": "Find your BDSP RNG seed from your trainer’s blinks and time stationary encounters. Runs entirely on your phone.",
   "start_url": "./",
   "scope": "./",

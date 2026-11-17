@@ -458,6 +458,68 @@ const Core = (() => {
     return { initial: st, state: out.state() };
   }
 
+  // ---- error-tolerant recovery ----
+  // blinks are placed at positions p (RNG calls after the first blink's call). Each observed blink says the
+  // RNG output at p has bits 1-3 clear (and bit 0 = double/single if trusted). Missed blinks add no
+  // equations, so they don't break the maths; extra or mis-typed blinks do, so we try removing/fixing them.
+  function makeSolver(maxPos) {
+    const T = getTrans();
+    const rowsAt = []; let t = [T[124], T[125], T[126], T[127]];
+    for (let p = 0; p <= maxPos; p++) { rowsAt.push(t); t = matMul(t, T); }
+    function solveRows(S, obs) {
+      const bm = S.slice(), res = obs.slice(); let pivot = 0;
+      for (let i = 0; i < 128; i++) {
+        const check = 1n << BigInt(127 - i); let f = -1;
+        for (let j = pivot; j < bm.length; j++) if (bm[j] & check) { f = j; break; }
+        if (f < 0) continue;
+        [bm[f], bm[pivot]] = [bm[pivot], bm[f]]; [res[f], res[pivot]] = [res[pivot], res[f]];
+        for (let j = 0; j < bm.length; j++) if (j !== pivot && (bm[j] & check)) { bm[j] ^= bm[pivot]; res[j] ^= res[pivot]; }
+        pivot++;
+      }
+      if (pivot < 128) return null;                          // not enough information
+      for (let j = pivot; j < bm.length; j++) if (res[j]) return null; // contradictory blinks
+      let v = 0n; for (let i = 0; i < 128; i++) v = (v << 1n) | BigInt(res[i]);
+      return [Number((v >> 96n) & 0xffffffffn), Number((v >> 64n) & 0xffffffffn), Number((v >> 32n) & 0xffffffffn), Number(v & 0xffffffffn)];
+    }
+    // list: [{p, type (0|1|null)}] sorted by p
+    return function solve(list) {
+      if (list.length < 30) return null;
+      const S = [], obs = [];
+      for (const b of list) {
+        if (b.p > maxPos) return null;
+        const r = rowsAt[b.p];
+        S.push(r[0], r[1], r[2]); obs.push(0, 0, 0);
+        if (b.type != null) { S.push(r[3]); obs.push(b.type); }
+      }
+      const st = solveRows(S, obs); if (!st) return null;
+      // check every observed blink, and count blinks the game made that weren't recorded
+      const rng = new Xorshift(...st); const last = list[list.length - 1].p; const set = new Map(list.map(b => [b.p, b.type]));
+      let missed = 0;
+      for (let p = 0; p <= last; p++) {
+        const r = rng.next(); const blink = isBlinkRand(r);
+        if (set.has(p)) { if (!blink) return null; const ty = set.get(p); if (ty != null && (r & 1) !== ty) return null; }
+        else if (blink) missed++;
+      }
+      if (missed > Math.max(3, Math.floor(list.length * 0.3))) return null;
+      return { initial: st, state: new Xorshift(...st).advance(last + 1).state(), missed };
+    };
+  }
+  // generator of attempts so the app can run them a few at a time and show progress
+  // yields {label, list} ; caller runs solve(list)
+  function* recoveryAttempts(types, rawIntervals) {
+    const iv = rawIntervals.slice(1); const n = types.length;
+    const pos = [0]; for (const x of iv) pos.push(pos[pos.length - 1] + x);
+    const base = types.map((ty, i) => ({ p: pos[i], type: ty }));
+    yield { kind: 'exact', list: base };
+    for (let k = 0; k < n; k++) yield { kind: 'flip', k, list: base.map((b, i) => i === k ? { p: b.p, type: 1 - b.type } : b) };
+    for (let k = 0; k < n; k++) yield { kind: 'drop', k, list: base.filter((_, i) => i !== k) };
+    for (let k = 1; k < n; k++) for (const d of [-1, 1]) {
+      if (iv[k - 1] + d < 1) continue;
+      yield { kind: 'shift', k, d, list: base.map((b, i) => i >= k ? { p: b.p + d, type: b.type } : b) };
+    }
+  }
+  function attemptCount(n) { return 1 + n + n + 2 * (n - 1); }
+
   // ---- reidentify, player only (reidentifyByIntervals, th=0) ----
   // returns { state (after last blink call), advances (calls consumed from base) , matches }
   function reidentify(baseState, rawIntervals, searchMax = 1e6) {
@@ -625,7 +687,7 @@ const Core = (() => {
     }
   }
 
-  return { Xorshift, TICK, randrange, isBlinkRand, recover, reidentify, reidentifyNoisy, makeTimeline, generateRange, NATURES, gen32 };
+  return { Xorshift, TICK, randrange, isBlinkRand, recover, makeSolver, recoveryAttempts, attemptCount, reidentify, reidentifyNoisy, makeTimeline, generateRange, NATURES, gen32 };
 })();
 
 </script>
@@ -821,17 +883,17 @@ function makeRecorder(host, opts) {
       // a recorded clip only knows times relative to itself; estimate wall-clock time from when the file was saved
       const end = vFile && vFile.lastModified ? vFile.lastModified : now();
       const lastT = end - (vEl.duration * 1000 - lastMedia);
-      opts.onDone(blinks.map(b => (b.dbl ? 1 : 0)), iv.map(x => x.n), lastT, iv, resEl, { approx: true });
+      opts.onDone(blinks.map(b => (b.dbl ? 1 : 0)), iv.map(x => x.n), lastT, iv, resEl, { approx: true, times: blinks.map(b => b.t) });
       return;
     }
     if (opts.keepGoing && opts.keepGoing()) {
       const iv = intervals();
-      opts.onDone(blinks.map(b => (b.dbl ? 1 : 0)), iv.map(x => x.n), blinks[blinks.length - 1].t, iv, resEl);
+      opts.onDone(blinks.map(b => (b.dbl ? 1 : 0)), iv.map(x => x.n), blinks[blinks.length - 1].t, iv, resEl, { times: blinks.map(b => b.t) });
       return;
     }
     finished = true; stopArmed();
     const iv = intervals();
-    opts.onDone(blinks.map(b => (b.dbl ? 1 : 0)), iv.map(x => x.n), blinks[blinks.length - 1].t, iv, resEl);
+    opts.onDone(blinks.map(b => (b.dbl ? 1 : 0)), iv.map(x => x.n), blinks[blinks.length - 1].t, iv, resEl, { times: blinks.map(b => b.t) });
   }
   function reset() { blinks = []; finished = false; clearTimeout(doneTimer); resEl.textContent = ''; resEl.className = 'msg result'; clearAllWarns(); lastEventWall = null; lastEventMedia = 0; render(); if (opts.onReset) opts.onReset(); }
 
@@ -863,7 +925,7 @@ function makeRecorder(host, opts) {
     const wctx = work.getContext('2d', { willReadFrequently: true });
     let tmpl = null, tc = null, tn = 0;             // template, zero-mean template, its norm
     let track = null;                               // tracked eye centre as a fraction of the frame
-    let state = 0, stateStart = 0, changedSince = null;
+    let state = 0, stateStart = 0, changedSince = null, reopened = false;
     const buf = new Float32Array(SW * SW), I1 = new Float64Array((SW + 1) * (SW + 1)), I2 = new Float64Array((SW + 1) * (SW + 1));
     function grab(cxF, cyF) {
       const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
@@ -932,9 +994,9 @@ function makeRecorder(host, opts) {
           if (Math.abs(track.x - roi.x) > bwF * 2.5 || Math.abs(track.y - roi.y) * vh / vw > bwF * 2.5) { d.reset(); d.onMoved && d.onMoved(); return; }
         }
         if (closed) {
-          if (state === 0) { state = 1; stateStart = t; d.onBlink && d.onBlink(t); d.draw(); }
-          else if (state === 1 && t - stateStart > 300) { state = 2; d.onDouble && d.onDouble(); }
-        }
+          if (state === 0) { state = 1; stateStart = t; reopened = false; d.onBlink && d.onBlink(t); d.draw(); }
+          else if (state === 1 && reopened && t - stateStart > 200) { state = 2; d.onDouble && d.onDouble(); }
+        } else if (state === 1) reopened = true;   // a double blink means the eyes opened again, then shut
         if (state !== 0 && t - stateStart > 700) { state = 0; d.draw(); }
         if (closed) { if (changedSince == null) changedSince = t; else if (t - changedSince > WD.moved) { changedSince = null; d.reset(); d.onMoved && d.onMoved(); } }
         else changedSince = null;
@@ -1127,19 +1189,47 @@ function setMethod(section, rec) {
 const recId = makeRecorder($('[data-recorder="id"]'), {
   need: () => 40,
   onDone(bits, ivs, lastT, detail, msg, info = {}) {
-    const res = Core.recover(bits, ivs);
-    if (!res) {
+    const n = bits.length;
+    const maxPos = ivs.slice(1).reduce((x, y) => x + y, 0) + n + 2;
+    const solve = Core.makeSolver(maxPos);
+    const total = Core.attemptCount(n);
+    const it = Core.recoveryAttempts(bits, ivs);
+    let done = 0;
+    msg.className = 'msg result'; msg.textContent = 'Working out your seed…';
+    const step = () => {
+      const stop = performance.now() + 40;
+      for (let a = it.next(); !a.done; a = it.next()) {
+        done++;
+        const r = solve(a.value.list);
+        if (r) return found(r, a.value);
+        if (performance.now() > stop) { if (done > 1) msg.textContent = `No exact match, so checking for one mis-recorded blink… ${Math.round(done / total * 100)}%`; return setTimeout(step, 0); }
+      }
+      failed();
+    };
+    const found = (r, a) => {
+      // time of the last blink actually used (differs only if the last blink was the one ignored)
+      const usedLast = a.kind === 'drop' && a.k === n - 1 ? n - 2 : n - 1;
+      const t0 = info.times ? lastT - (info.times[n - 1] - info.times[usedLast]) : lastT;
+      S.seed = r.state;
+      S.anchor = { state: r.state, adv: 0, t0, pkNext: null, reid: false, approx: !!info.approx };
+      save();
+      const fix = a.kind === 'flip' ? ` Blink ${a.k + 1} was recorded as a ${bits[a.k] ? 'double' : 'single'} but was really a ${bits[a.k] ? 'single' : 'double'}; I corrected it.`
+        : a.kind === 'drop' ? ` Blink ${a.k + 1} wasn’t a real blink (a false detection or an extra tap), so I ignored it.`
+        : a.kind === 'shift' ? ` The gap before blink ${a.k + 1} was a tick out (a slightly mistimed blink); I corrected it.` : '';
+      const miss = r.missed ? ` You missed ${r.missed} blink${r.missed > 1 ? 's' : ''} along the way, which is fine.` : '';
+      msg.className = 'msg result good';
+      msg.innerHTML = `Seed found and checked against every recorded blink.${fix}${miss}` + (info.approx ? ' The advance count is a rough estimate from when the video was saved, which is fine for picking a target. Lining up at the Pokémon makes it exact.' : ' Tracking from advance 0.') + `<br><span class="small">${r.state.map(hex).join(' ')}</span><br>Next: <a href="#target">pick your target</a>.`;
+      refresh();
+    };
+    const failed = () => {
       const bad = detail.filter(d => d.off).length;
       msg.className = 'msg result bad';
-      msg.textContent = 'Couldn’t find a seed from those blinks. Most likely one was missed, doubled up, or a double blink was recorded as single.' + (bad ? ` ${bad} gap${bad > 1 ? 's' : ''} marked “?” looked off.` : '') + ' Tap “Start over” and try again.';
-      return;
-    }
-    S.seed = res.state;
-    S.anchor = { state: res.state, adv: 0, t0: lastT, pkNext: null, reid: false, approx: !!info.approx };
-    save();
-    msg.className = 'msg result good';
-    msg.innerHTML = `Seed found and checked against all 40 blinks.` + (info.approx ? ' The advance count is a rough estimate from when the video was saved, which is fine for picking a target. Lining up at the Pokémon makes it exact.' : ' Tracking from advance 0.') + `<br><span class="small">${res.state.map(hex).join(' ')}</span><br>Next: <a href="#target">pick your target</a>.`;
-    refresh();
+      msg.innerHTML = 'Couldn’t find a seed, even allowing for one mis-recorded blink. The usual causes, most likely first:<br>'
+        + '1. Something else on screen uses the RNG. Step 1 must be somewhere only your trainer moves: no NPCs, no other people, and not in front of the Pokémon you’re hunting (Arceus blinks too). Inside your house is ideal.<br>'
+        + '2. Doubles aren’t being read right. Watch the log: every time you see a double blink on the TV, a “d” should appear. If not, adjust the sensitivity.<br>'
+        + '3. Two or more blinks went wrong.' + (bad ? ` ${bad} gap${bad > 1 ? 's' : ''} marked “?” looked off.` : '') + '<br>Tap “Start over” and try again.';
+    };
+    setTimeout(step, 20);
   }
 });
 setMethod($('#v-seed'), recId);
